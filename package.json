@@ -1,0 +1,48 @@
+{
+  "name": "paini",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx scripts/server.ts dev",
+    "build": "next build",
+    "start": "tsx scripts/server.ts start",
+    "lint": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "test:e2e": "playwright test",
+    "format": "prettier --write src scripts tests package.json tsconfig.json next.config.ts playwright.config.ts",
+    "db:migrate": "tsx scripts/manage.ts migrate",
+    "warden:create": "tsx scripts/manage.ts warden",
+    "superadmin:setup": "tsx scripts/manage.ts superadmin",
+    "superadmin:recover": "tsx scripts/manage.ts recover-superadmin",
+    "backup": "tsx scripts/manage.ts backup",
+    "cleanup": "tsx scripts/manage.ts cleanup"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1150.0",
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
+    "argon2": "^0.45.1",
+    "better-sqlite3": "^13.0.3",
+    "csv-parse": "^7.0.3",
+    "dotenv": "^18.0.7",
+    "lucide-react": "^1.55.0",
+    "next": "^16.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "sharp": "^0.35.5",
+    "tar-stream": "^3.2.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@babel/parser": "^8.0.7",
+    "@playwright/test": "^1.64.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/tar-stream": "^3.1.5",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

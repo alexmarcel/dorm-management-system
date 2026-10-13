@@ -1,0 +1,130 @@
+.page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.page > :global(.page-title),
+.page > :global(.admin-counts),
+.page > :global(.settings-tabs),
+.page > :global(.panel),
+.page > :global(.alert) {
+  margin: 0;
+  min-width: 0;
+}
+
+.page > :global(.panel.form) {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+
+.page > :global(.panel.form) > :is(h2, h3, p, label, .divider) {
+  margin: 0;
+}
+
+.page > :global(.panel.form) > p {
+  line-height: 1.65;
+  max-width: 85ch;
+}
+
+.page > :global(.panel.form) > :is(button, a, span) {
+  justify-self: start;
+}
+
+.page > :global(.panel.form) > :global(.divider) {
+  margin: 8px 0;
+}
+
+.page :global(.panel) > :global(.filter-row) {
+  padding: 20px 24px;
+  gap: 20px;
+}
+
+.page :global(.filter-row) > :global(.check-label) {
+  flex: 0 0 auto;
+  min-height: 43px;
+}
+
+.page :global(.check-label) {
+  align-items: flex-start;
+  line-height: 1.5;
+}
+
+.page :global(.check-label) input {
+  flex-shrink: 0;
+  margin: 3px 0 0;
+}
+
+.page :global(.filter-row) > :global(.check-label) {
+  align-items: center;
+}
+
+.page :global(.filter-row) :global(.check-label) input {
+  margin: 0;
+}
+
+.page :global(.table-scroll) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.page :global(td) {
+  vertical-align: top;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.page :global(.row-actions) {
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 180px;
+  max-width: 280px;
+}
+
+.page :global(.row-actions) button {
+  padding: 8px 12px;
+}
+
+.page :global(.backup-counts) {
+  gap: 8px 16px;
+  margin: 12px 0;
+}
+
+.page :global(.backup-counts) dt,
+.page :global(.backup-counts) dd {
+  margin: 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .page {
+    gap: 16px;
+  }
+
+  .page > :global(.panel.form),
+  .page :global(.panel-heading),
+  .page :global(.panel) > :global(.filter-row) {
+    padding: 20px 16px;
+  }
+
+  .page :global(.panel) > :global(.filter-row) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .page :global(.filter-row) > :global(.check-label) {
+    min-height: 32px;
+  }
+
+  .page :global(.settings-tabs) {
+    gap: 8px;
+  }
+
+  .page :global(.settings-tabs) button {
+    min-width: 140px;
+    white-space: normal;
+    padding: 12px;
+  }
+}
