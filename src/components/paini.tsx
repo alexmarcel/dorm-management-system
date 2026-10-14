@@ -383,12 +383,12 @@ function Account({ user, onChanged }: { user: User; onChanged: () => void }) {
           <input
             type="password"
             name="password"
-            minLength={12}
+            minLength={8}
             maxLength={128}
             autoComplete="new-password"
             required
           />
-          <small>{t("At least 12 characters.")}</small>
+          <small>{t("At least 8 characters.")}</small>
         </label>
         <label>
           {t("Confirm new password")}

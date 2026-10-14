@@ -8,9 +8,9 @@ export const tokenHash = (s: string) =>
   createHash("sha256").update(s).digest("hex");
 export async function passwordHash(password: string) {
   assert(
-    password.length >= 12 && password.length <= 128,
+    password.length >= 8 && password.length <= 128,
     400,
-    "Use a password between 12 and 128 characters.",
+    "Use a password between 8 and 128 characters.",
   );
   return argon2.hash(password, {
     type: argon2.argon2id,

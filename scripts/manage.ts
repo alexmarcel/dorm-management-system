@@ -66,7 +66,7 @@ async function main() {
     rl.close();
     if (!name.trim() || !/^[a-z0-9_.-]{3,60}$/.test(username) || !password)
       throw new Error(
-        "Supply WARDEN_PASSWORD securely in the environment (12–128 characters), plus a valid name and username.",
+        "Supply WARDEN_PASSWORD securely in the environment (8–128 characters), plus a valid name and username.",
       );
     const hash = await passwordHash(password);
     db.prepare(

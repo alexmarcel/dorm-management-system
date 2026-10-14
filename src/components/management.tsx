@@ -14,6 +14,7 @@ import {
   X,
   Users,
   KeyRound,
+  Trash2,
 } from "lucide-react";
 import { api, useData } from "@/lib/client";
 import { type Locations, type User } from "@/lib/constants";
@@ -372,6 +373,12 @@ export function StudentsPage() {
       room: r?.id || "",
     });
   }
+  async function removeOrRestore(student:User){
+    if(!confirm(t(student.archived_at?'Restore this student account? Old sessions will not be restored.':'Delete {name}? Their account will be archived and access revoked. Reports and history will be preserved.',{name:student.name})))return;
+    setBusy(true);setMessage('');
+    try{await api('students/'+student.id,{action:student.archived_at?'restore':'archive'});if(data?.items.length===1&&page>1)setPage(page-1);else await refresh();}
+    catch(e){setMessage((e as Error).message);}finally{setBusy(false);}
+  }
   return (
     <>
       <PageTitle
@@ -410,6 +417,7 @@ export function StudentsPage() {
               <option value="">{t("All accounts")}</option>
               <option value="true">{t("Active")}</option>
               <option value="false">{t("Inactive")}</option>
+              <option value="archived">{t('Deleted accounts')}</option>
             </select>
           </label>
         </div>
@@ -465,11 +473,12 @@ export function StudentsPage() {
                             "badge " + (s.active ? "closed" : "submitted")
                           }
                         >
-                          {s.active ? t("Active") : t("Inactive")}
+                          {s.archived_at?t('Deleted'):s.active ? t("Active") : t("Inactive")}
                         </span>
                       </td>
                       <td>
                         <div className="row-actions">
+                          {!s.archived_at&&<>
                           <button
                             className="icon-button"
                             aria-label={t("Edit {name}", { name: s.name })}
@@ -489,6 +498,8 @@ export function StudentsPage() {
                           >
                             <KeyRound size={17} />
                           </button>
+                          </>}
+                          <button className="icon-button" disabled={busy} aria-label={t(s.archived_at?'Restore {name}':'Delete student {name}',{name:s.name})} title={t(s.archived_at?'Restore account':'Delete student')} onClick={()=>removeOrRestore(s)}>{s.archived_at?<RotateCcw size={17}/>:<Trash2 size={17}/>}</button>
                           <Link
                             className="text-button"
                             href={"/reports?student=" + s.id}
@@ -627,12 +638,12 @@ export function StudentsPage() {
                     type="password"
                     autoComplete="new-password"
                     required
-                    minLength={12}
+                    minLength={8}
                     maxLength={128}
                   />
                   <small>
                     {t(
-                      "At least 12 characters. Share it securely with the student.",
+                      "At least 8 characters. Share it securely with the student.",
                     )}
                   </small>
                 </label>
@@ -729,7 +740,7 @@ export function StudentsPage() {
                   name="password"
                   type="password"
                   autoComplete="new-password"
-                  minLength={12}
+                  minLength={8}
                   maxLength={128}
                   required
                   autoFocus

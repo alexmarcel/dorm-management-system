@@ -14,6 +14,7 @@ import {
   uid,
   now,
   locations,
+  archiveStudent,
 } from "../src/lib/service";
 import { dashboard } from "../src/lib/dashboard";
 import {
@@ -428,6 +429,20 @@ test("account login, password change, reset and deactivation invalidate access",
   } finally {
     f.db.close();
   }
+});
+test('wardens can delete/restore students without deleting report history or reviving sessions',async()=>{
+ const f=fixture();try{
+   const r=createReport(f.db,f.a,f.draft());addEvent(f.db,f.w,r.id,{message:'Fixed',status:'Closed',expected_status:'Submitted',submission_key:uid()});
+   const before=f.db.prepare('SELECT * FROM reports WHERE id=?').get(r.id),events=f.db.prepare('SELECT * FROM events WHERE report_id=?').all(r.id);
+   f.db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(await passwordHash('Student-password-123'),f.a.id);
+   const signed=await login(f.db,'alice','Student-password-123');
+   assert.throws(()=>archiveStudent(f.db,f.a,f.a.id),/Warden access/);assert.throws(()=>archiveStudent(f.db,f.w,f.w2.id),/Student not found/);
+   archiveStudent(f.db,f.w,f.a.id);archiveStudent(f.db,f.w2,f.a.id);
+   assert.equal(sessionUser(f.db,signed.token),null);await assert.rejects(login(f.db,'alice','Student-password-123'),/Invalid/);
+   assert.deepEqual(f.db.prepare('SELECT * FROM reports WHERE id=?').get(r.id),before);assert.deepEqual(f.db.prepare('SELECT * FROM events WHERE report_id=?').all(r.id),events);assert.equal(getReport(f.db,f.w,r.id).status,'Closed');
+   archiveStudent(f.db,f.w,f.a.id,false);assert.equal(sessionUser(f.db,signed.token),null);assert.equal((await login(f.db,'alice','Student-password-123')).user.active,1);
+   assert.deepEqual(f.db.pragma('foreign_key_check'),[]);
+ }finally{f.db.close();}
 });
 test("server verifies WebP format, dimensions, byte limit and strips metadata", async () => {
   const input = await sharp({

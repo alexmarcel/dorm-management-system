@@ -72,7 +72,7 @@ export const studentSchema = z.object({
   student_id: text.transform((s) => s.toUpperCase()),
   room_id: key.nullable().default(null),
   active: z.boolean().default(true),
-  password: z.string().min(12).max(128).optional(),
+  password: z.string().min(8).max(128).optional(),
 });
 const locationSchema = z.object({
   id: key.optional(),
@@ -99,6 +99,18 @@ export function activeActor(db: DB, user: User) {
 }
 export function warden(user: User) {
   assert(user.role === "warden", 403, "Warden access required.");
+}
+export function archiveStudent(db:DB,actor:User,id:string,archived=true){
+  return db.transaction(()=>{
+    warden(activeActor(db,actor));
+    const student=db.prepare("SELECT id FROM users WHERE id=? AND role='student'").get(id);
+    assert(student,404,'Student not found.');
+    if(archived)db.prepare('UPDATE users SET active=0,archived_at=COALESCE(archived_at,?) WHERE id=?').run(now(),id);
+    else db.prepare('UPDATE users SET active=1,archived_at=NULL WHERE id=?').run(id);
+    db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);
+    db.prepare('INSERT INTO admin_audit VALUES (?,?,?,?,?,?)').run(uid(),actor.id,archived?'student.archive':'student.restore',id,'{}',now());
+    return {ok:true};
+  }).immediate();
 }
 export function maintenanceUser(user: User) {
   assert(

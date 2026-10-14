@@ -1,5 +1,6 @@
 export type Locale = "ms" | "en";
 export const ms: Record<string, string> = {
+ 'Deleted accounts':'Akaun yang dihapus','Deleted':'Dihapus','Delete student':'Hapus pelajar','Delete student {name}':'Hapus pelajar {name}','Delete {name}? Their account will be archived and access revoked. Reports and history will be preserved.':'Hapus {name}? Akaun akan diarkibkan dan akses ditamatkan. Laporan serta sejarah akan dikekalkan.','Restore this student account? Old sessions will not be restored.':'Pulihkan akaun pelajar ini? Sesi lama tidak akan dipulihkan.',
  '. All sessions will end. The next-login password change follows the superadmin security setting.':'. Semua sesi akan ditamatkan. Penukaran kata laluan pada log masuk seterusnya mengikut tetapan keselamatan superadmin.',
   "Account security": "Keselamatan akaun",
   "Require password change on first login":
@@ -155,7 +156,7 @@ export const ms: Record<string, string> = {
   "Current password": "Kata laluan semasa",
   "New password": "Kata laluan baharu",
   "Confirm new password": "Sahkan kata laluan baharu",
-  "At least 12 characters.": "Sekurang-kurangnya 12 aksara.",
+  "At least 8 characters.": "Sekurang-kurangnya 8 aksara.",
   "Change password": "Tukar kata laluan",
   "New passwords do not match.": "Kata laluan baharu tidak sepadan.",
   "Password updated successfully.": "Kata laluan berjaya dikemas kini.",
@@ -341,8 +342,8 @@ export const ms: Record<string, string> = {
   "Full name": "Nama penuh",
   "Student ID": "ID pelajar",
   "Initial password": "Kata laluan awal",
-  "At least 12 characters. Share it securely with the student.":
-    "Sekurang-kurangnya 12 aksara. Kongsikan secara selamat kepada pelajar.",
+  "At least 8 characters. Share it securely with the student.":
+    "Sekurang-kurangnya 8 aksara. Kongsikan secara selamat kepada pelajar.",
   "Room assignment": "Penetapan bilik",
   "Current assignment is archived. Leave unchanged or select a new active room.":
     "Bilik semasa telah diarkibkan. Kekalkan atau pilih bilik aktif baharu.",
@@ -460,8 +461,8 @@ export const ms: Record<string, string> = {
   "Invalid username or password.": "Nama pengguna atau kata laluan tidak sah.",
   "Current password is incorrect.": "Kata laluan semasa tidak betul.",
   "Choose a different password.": "Pilih kata laluan yang berbeza.",
-  "Use a password between 12 and 128 characters.":
-    "Gunakan kata laluan antara 12 hingga 128 aksara.",
+  "Use a password between 8 and 128 characters.":
+    "Gunakan kata laluan antara 8 hingga 128 aksara.",
   "Too many attempts. Try again in 15 minutes.":
     "Terlalu banyak cubaan. Cuba lagi dalam 15 minit.",
   "Superadmin access required.": "Akses superadmin diperlukan.",

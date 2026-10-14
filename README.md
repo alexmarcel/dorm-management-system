@@ -29,6 +29,8 @@ PAINI is a bilingual dorm maintenance application built with Next.js, TypeScript
 
 Archived wardens retain historical authorship and reserved usernames, but immediately lose login access. Closed reports cannot be edited, replied to, deleted, or reopened through normal workflows.
 
+Wardens can **Delete student / Hapus pelajar** in **Students / Pelajar**. This archives the account and revokes sessions without deleting reports or historical authorship. The **Deleted accounts** filter provides restoration; usernames and student IDs remain reserved, and old sessions never revive.
+
 ## Quick start
 
 ### Requirements
@@ -57,7 +59,7 @@ cp .env.example .env
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and set your own `PAINI_SUPERADMIN_USERNAME` and `PAINI_SUPERADMIN_PASSWORD`. The password must contain 12–128 characters. **Do not commit credentials.** There is no shared default password in this repository.
+Edit `.env` and set your own `PAINI_SUPERADMIN_USERNAME` and `PAINI_SUPERADMIN_PASSWORD`. The password must contain 8–128 characters. **Do not commit credentials.** There is no shared default password in this repository.
 
 ### 2. Initialize and run
 
@@ -66,7 +68,7 @@ npm run db:migrate
 npm run dev
 ```
 
-Open http://localhost:3000. Bootstrap creates one Superadmin after migration, using a globally unique username and a 12–128-character password. Change the password on first login. Restarts and environment edits never reset an existing account. No shared password is committed; examples contain empty placeholders. Keep `.env` private and untracked.
+Open http://localhost:3000. Bootstrap creates one Superadmin after migration, using a globally unique username and a 8–128-character password. Change the password on first login. Restarts and environment edits never reset an existing account. No shared password is committed; examples contain empty placeholders. Keep `.env` private and untracked.
 
 ### 3. Set up the dorm
 

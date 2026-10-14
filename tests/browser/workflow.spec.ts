@@ -236,6 +236,21 @@ test("complete warden setup, student reporting with compressed photo, shared upd
     ),
   ).toBe(true);
   expect(errors).toEqual([]);
+  await page.goto('/students');
+  const row=page.getByRole('row').filter({has:page.getByRole('cell',{name:'sara',exact:true})});
+  await expect(row).toBeVisible();
+  const students=await (await page.request.get('/api/students?q=sara')).json();const studentId=students.items[0].id;
+  expect((await student.request.post('/api/students/'+studentId,{headers:{Origin:'http://localhost:3100'},data:{action:'archive'}})).status()).toBe(403);
+  page.once('dialog',d=>d.dismiss());await row.getByRole('button',{name:'Delete student Sara Student'}).click();await expect(row).toBeVisible();
+  page.once('dialog',d=>d.accept());await row.getByRole('button',{name:'Delete student Sara Student'}).click();await expect(row).toHaveCount(0);
+  expect((await student.request.get('/api/me')).status()).toBe(401);
+  expect((await page.request.get('/api/reports/'+reportId)).status()).toBe(200);
+  expect((await page.request.post('/api/students/'+studentId,{headers:{Origin:'http://localhost:3100'},data:{action:'reset',password:'Another-password-123'}})).status()).toBe(404);
+  await page.getByLabel('Account status',{exact:true}).selectOption('archived');await expect(row).toBeVisible();
+  await expect(row.getByRole('button',{name:'Edit Sara Student'})).toHaveCount(0);
+  page.once('dialog',d=>d.accept());await row.getByRole('button',{name:'Restore Sara Student'}).click();await expect(row).toHaveCount(0);
+  await page.getByLabel('Account status',{exact:true}).selectOption('');await expect(row).toBeVisible();
+  expect((await student.request.get('/api/me')).status()).toBe(401);
   await studentContext.close();
   await second.close();
 });

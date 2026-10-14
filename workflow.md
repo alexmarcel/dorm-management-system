@@ -146,11 +146,11 @@ Provide:
 
 A reset sets a temporary password, invalidates existing sessions, and requires another password change at next login. Deactivation invalidates sessions and prevents access. Reactivation does not revive revoked sessions.
 
-Retain reports and historical authorship when an account is deactivated. Do not offer permanent student deletion in version one.
+Wardens can choose **Delete student / Hapus pelajar** from the Pelajar row actions. Confirm before archiving the student account, setting it inactive, revoking every session, and recording the action in the audit log. Hide deleted accounts from the default list; use the **Deleted accounts / Akaun yang dihapus** status filter to view and restore them. Restoration reactivates the account but never restores revoked sessions. Reject ordinary edits/password resets while archived. Preserve student identity, reserved username/student ID, all reports, photos and timeline authorship, including closed-report snapshots. This is recoverable account deletion, not permanent destruction of report history. Only active wardens may delete/restore students; students and superadmin cannot call these endpoints.
 
 ### 4.4 Multiple warden accounts
 
-The superadmin provisions wardens through Settings. Create with full name, globally unique username, and a 12–128-character temporary password. Search by name/username; list status and creation date. Edit name/username, deactivate/reactivate, reset passwords, archive, filter archived accounts, and restore. Reset requires a password change at next login. Deactivation, reset and archiving revoke sessions immediately. Archiving retains account identity, report references and historical authorship; usernames remain reserved. Restoration does not revive old sessions. The server-side warden command remains an operator fallback, not the normal provisioning workflow.
+The superadmin provisions wardens through Settings. Create with full name, globally unique username, and a 8–128-character temporary password. Search by name/username; list status and creation date. Edit name/username, deactivate/reactivate, reset passwords, archive, filter archived accounts, and restore. Reset requires a password change at next login. Deactivation, reset and archiving revoke sessions immediately. Archiving retains account identity, report references and historical authorship; usernames remain reserved. Restoration does not revive old sessions. The server-side warden command remains an operator fallback, not the normal provisioning workflow.
 
 All wardens have the same report, location, and student-management permissions. There is no block-specific restriction or exclusive report ownership. Students cannot create or promote warden accounts.
 
@@ -162,7 +162,7 @@ Central dictionaries translate navigation, dashboards, statuses/categories, form
 
 ### 4.6 Superadmin bootstrap and recovery
 
-Set server-only `PAINI_SUPERADMIN_USERNAME` and `PAINI_SUPERADMIN_PASSWORD` in the untracked environment file; committed examples contain empty placeholders. After migrations, an idempotent bootstrap creates one account named `Superadmin`, hashes its 12–128-character password with Argon2id and requires a first-login password change. Existing superadmin credentials are never overwritten by a restart or environment edit. Username collisions with other roles fail; no silent promotion. A unique database constraint prevents multiple superadmins. No UI creates/deletes superadmins.
+Set server-only `PAINI_SUPERADMIN_USERNAME` and `PAINI_SUPERADMIN_PASSWORD` in the untracked environment file; committed examples contain empty placeholders. After migrations, an idempotent bootstrap creates one account named `Superadmin`, hashes its 8–128-character password with Argon2id and requires a first-login password change. Existing superadmin credentials are never overwritten by a restart or environment edit. Username collisions with other roles fail; no silent promotion. A unique database constraint prevents multiple superadmins. No UI creates/deletes superadmins.
 
 For forgotten passwords, an OS administrator explicitly sets `SUPERADMIN_RECOVERY_PASSWORD` and runs `npm run superadmin:recover`; revoke sessions, require password change, record recovery without logging the password, then remove the recovery variable. This is separate from initial bootstrap credentials.
 

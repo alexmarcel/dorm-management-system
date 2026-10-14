@@ -117,7 +117,7 @@ const wardenSchema = z.object({
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9_.-]{3,60}$/),
-  password: z.string().min(12).max(128).optional(),
+  password: z.string().min(8).max(128).optional(),
   active: z.boolean().default(true),
 });
 export function listWardens(db: DB, actor: User, params: URLSearchParams) {
@@ -145,7 +145,7 @@ export async function manageWarden(
   const d = action === "save" ? wardenSchema.parse(input) : null;
   const reset =
     action === "reset"
-      ? z.object({ password: z.string().min(12).max(128) }).parse(input)
+      ? z.object({ password: z.string().min(8).max(128) }).parse(input)
       : null;
   if (!id)
     assert(
@@ -224,7 +224,7 @@ const csvRow = z.object({
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9_.-]{3,60}$/),
-  password: z.string().min(12).max(128),
+  password: z.string().min(8).max(128),
   "phone number": z.string().trim().max(40).default(""),
   email: z.union([z.email().max(254), z.literal("")]).default(""),
 });

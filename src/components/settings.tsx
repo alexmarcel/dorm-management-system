@@ -668,10 +668,10 @@ export default function Settings() {
                     name="password"
                     autoComplete="new-password"
                     required
-                    minLength={12}
+                    minLength={8}
                     maxLength={128}
                   />
-                  <small>{t("At least 12 characters.")}</small>
+                  <small>{t("At least 8 characters.")}</small>
                 </label>
               )}
               <ErrorBox message={error} />

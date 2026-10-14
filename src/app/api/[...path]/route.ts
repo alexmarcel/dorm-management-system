@@ -26,6 +26,7 @@ import {
   studentSchema,
   userColumns,
   availableRoom,
+  archiveStudent,
 } from "@/lib/service";
 import { dashboard } from "@/lib/dashboard";
 import { validatePhoto, putPhoto, readPhoto, deletePhoto } from "@/lib/storage";
@@ -125,7 +126,7 @@ async function handle(
       const d = z
         .object({
           current: z.string().max(128),
-          password: z.string().min(12).max(128),
+          password: z.string().min(8).max(128),
         })
         .parse(await input(req));
       return cookie(
@@ -257,7 +258,7 @@ async function handle(
     if (route === "students" && method === "GET") {
       warden(actor);
       const p = req.nextUrl.searchParams,
-        clauses = ["u.role='student'"],
+        clauses = ["u.role='student'",req.nextUrl.searchParams.get('active')==='archived'?'u.archived_at IS NOT NULL':'u.archived_at IS NULL'],
         values: (string | number)[] = [];
       if (p.get("q")) {
         clauses.push(
@@ -265,7 +266,7 @@ async function handle(
         );
         values.push(...Array(3).fill(`%${p.get("q")}%`));
       }
-      if (p.get("active")) {
+      if (p.get("active") && p.get('active')!=='archived') {
         clauses.push("u.active=?");
         values.push(p.get("active") === "true" ? 1 : 0);
       }
@@ -303,15 +304,16 @@ async function handle(
     if (parts[0] === "students" && method === "POST" && parts.length <= 2) {
       warden(actor);
       const raw = await input(req);
+      if(parts[1]&&(raw.action==='archive'||raw.action==='restore'))return json(archiveStudent(db,actor,parts[1],raw.action==='archive'));
       if (parts[1] && raw.action === "reset") {
         const hashed = await passwordHash(
-          z.string().min(12).max(128).parse(raw.password),
+          z.string().min(8).max(128).parse(raw.password),
         );
         db.transaction(() => {
           warden(activeActor(db, actor));
           const result = db
             .prepare(
-              "UPDATE users SET password_hash=?,must_change=? WHERE id=? AND role='student'",
+              "UPDATE users SET password_hash=?,must_change=? WHERE id=? AND role='student' AND archived_at IS NULL",
             )
             .run(hashed, initialPasswordChange(db), parts[1]);
           assert(result.changes, 404, "Student not found.");
@@ -329,7 +331,7 @@ async function handle(
           const existing = parts[1]
             ? (db
                 .prepare(
-                  "SELECT room_id FROM users WHERE id=? AND role='student'",
+                  "SELECT room_id FROM users WHERE id=? AND role='student' AND archived_at IS NULL",
                 )
                 .get(id) as { room_id: string | null } | undefined)
             : undefined;
