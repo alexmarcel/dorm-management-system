@@ -48,11 +48,20 @@ paini-*.tar.gz
 backup.tar.gz
 upload.tar.gz
 
+# Isolated test workspaces if TEMP/TMP points inside the repository
+paini-admin-*/
+paini-backup-*/
+paini-concurrency-*/
+paini-production-*/
+paini-quota-*/
+
 # Generated diagnostics and local caches
 *.tsbuildinfo
 test-results/
 playwright-report/
 blob-report/
+playwright/.auth/
+playwright/.cache/
 .cache/
 logs/
 *.log

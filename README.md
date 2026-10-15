@@ -163,7 +163,7 @@ Tests use isolated databases/control stores and synthetic credentials. Browser s
 
 1. Install with `npm ci` and build with `npm run build`.
 2. Set absolute persistent local paths for DATABASE_PATH, UPLOAD_DIR and **CONTROL_DIR**, outside release/public directories. SQLite WAL must not use a network filesystem. Restrict OS permissions; control data includes backups, audit and recovery state.
-3. Set exact HTTPS APP_ORIGIN. Configure TLS/proxy headers using [deploy/nginx.conf](deploy/nginx.conf). Match archive limits to MAX_BACKUP_BYTES; allow 3 MB JSON requests for escaped CSV. Disable proxy request buffering for archives.
+3. Set exact HTTPS APP_ORIGIN. Configure isolated Traefik and required secrets using [deploy/SECURITY.md](deploy/SECURITY.md). Match archive limits to MAX_BACKUP_BYTES; allow 3 MB JSON requests for escaped CSV. Disable proxy request buffering for archives.
 4. Optional S3: configure S3_BUCKET, S3_REGION, standard AWS credentials/instance role and optional S3_ENDPOINT. Keep the bucket private. Permit reads/writes for original objects and restored/ namespaces.
 5. For upgrades, take a complete backup, stop writes, run `npm run db:migrate`, then start **one `npm start` supervisor** under an unprivileged service account. Do not use bare next start: the supervisor owns the queue and restart lifecycle. Startup also checks migrations and bootstrap.
 6. Let the service manager restart the supervisor on failure. Keep its child in the same service/process group so stopping the service stops both. One supervisor may own a control directory. Preserve it between releases.

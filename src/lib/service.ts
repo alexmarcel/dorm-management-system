@@ -1,3 +1,4 @@
+import { consume } from "./quotas";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { DB } from "./db";
@@ -377,6 +378,7 @@ export function createReport(db: DB, actor: User, input: unknown) {
         )
         .get(actor.id, d.submission_key) as { id: string } | undefined;
       if (existing) return existing;
+      consume(db, actor, "reports");
       const room = availableRoom(db, d.room_id);
       assert(room, 400, "This room is no longer available.");
       db.prepare(
@@ -465,6 +467,7 @@ export function addEvent(db: DB, actor: User, id: string, input: unknown) {
           "Invalid status transition.",
         );
       }
+      consume(db, actor, "events");
       const time = now(),
         event = insertEvent(
           db,

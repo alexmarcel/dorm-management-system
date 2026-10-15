@@ -1,3 +1,6 @@
+import { consume, uploadQuota } from "@/lib/quotas";
+import { securityConfig, sessionCookieOptions } from "@/lib/security-config";
+import { loginSource } from "@/lib/login-source";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
@@ -43,13 +46,7 @@ const json = (data: unknown, status = 200) => {
   return NextResponse.json(data, { status, headers });
 };
 function cookie(response: NextResponse, token: string) {
-  response.cookies.set(COOKIE, token, {
-    httpOnly: true,
-    sameSite: "strict",
-    secure: process.env.APP_ORIGIN?.startsWith("https://") || false,
-    path: "/",
-    maxAge: token ? 86400 : 0,
-  });
+  response.cookies.set(COOKIE, token, sessionCookieOptions(Boolean(token)));
   return response;
 }
 async function body(req: NextRequest, max = 65536) {
@@ -82,6 +79,7 @@ async function handle(
   context: { params: Promise<{ path: string[] }> },
 ) {
   let lease: string | null = null;
+  let refund: (() => void) | undefined;
   try {
     const requested = (await context.params).path.join("/");
     if (requested === "health" && req.method === "GET") {
@@ -99,7 +97,7 @@ async function handle(
       db = getDb(),
       method = req.method;
     if (method !== "GET") {
-      const expected = process.env.APP_ORIGIN || new URL(req.url).origin;
+      const expected = securityConfig().origin;
       assert(
         req.headers.get("origin") === expected,
         403,
@@ -110,11 +108,35 @@ async function handle(
       const d = z
         .object({ username: z.string().max(60), password: z.string().max(128) })
         .parse(await input(req));
-      const result = await login(db, d.username, d.password);
+      const result = await login(
+        db,
+        d.username,
+        d.password,
+        loginSource(req.headers),
+      );
       return cookie(json({ user: result.user }), result.token);
     }
     const actor = sessionUser(db, req.cookies.get(COOKIE)?.value);
     assert(actor, 401, "Please sign in.");
+    if (method !== "GET") {
+      const reservation = db.transaction(() => {
+        consume(db, actor, "mutations");
+        return db.prepare(
+          "SELECT reset_at FROM usage_limits WHERE user_id=? AND kind='mutations'",
+        ).get(actor.id) as { reset_at: number };
+      }).immediate();
+      refund = () => {
+        try {
+          db.prepare(
+            "UPDATE usage_limits SET used=MAX(0,used-1) WHERE user_id=? AND kind='mutations' AND reset_at=?",
+          ).run(actor.id, reservation.reset_at);
+        } catch {
+          // A database outage must not replace a sanitized error with an uncaught
+          // database error. The conservative reservation expires within a minute.
+          console.error("PAINI quota refund unavailable.");
+        }
+      };
+    }
     if (route === "logout" && method === "POST") {
       db.prepare("DELETE FROM sessions WHERE token_hash=?").run(
         tokenHash(req.cookies.get(COOKIE)!.value),
@@ -135,8 +157,11 @@ async function handle(
       );
     }
     assert(!actor.must_change, 403, "Change your password before continuing.");
-    if (parts[0] === "settings")
-      return await settingsApi(req, db, actor, parts);
+    if (parts[0] === "settings") {
+      const response = await settingsApi(req, db, actor, parts);
+      if (response.status >= 400) refund?.();
+      return response;
+    }
     assert(
       actor.role === "warden" || actor.role === "student",
       403,
@@ -202,6 +227,7 @@ async function handle(
       try {
         db.transaction(() => {
           activeActor(db, actor);
+          uploadQuota(db, actor, photo.bytes.length);
           db.prepare("INSERT INTO uploads VALUES (?,?,?,?,?,?,?)").run(
             id,
             actor.id,
@@ -413,6 +439,7 @@ async function handle(
     }
     throw new AppError(404, "Not found.");
   } catch (error) {
+    refund?.();
     if (error instanceof AppError)
       return json(
         { error: error.message, code: error.code, params: {} },

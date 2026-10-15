@@ -75,6 +75,7 @@ export async function makeBackup(
   try {
     snapshot.prepare("DELETE FROM sessions").run();
     snapshot.prepare("DELETE FROM login_limits").run();
+    snapshot.prepare("DELETE FROM password_work").run();
     snapshot
       .prepare(
         "DELETE FROM uploads WHERE id NOT IN (SELECT id FROM attachments)",
@@ -344,6 +345,7 @@ export async function stageRestore(source: string): Promise<RuntimeStorage> {
   try {
     db.prepare("DELETE FROM sessions").run();
     db.prepare("DELETE FROM login_limits").run();
+    db.prepare("DELETE FROM password_work").run();
     const keys = db
       .prepare(
         "SELECT u.object_key FROM uploads u JOIN attachments a ON a.id=u.id",

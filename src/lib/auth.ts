@@ -1,3 +1,5 @@
+import { limit } from "./security-config";
+import { passwordWork } from "./password-work";
 import { randomBytes, createHash } from "node:crypto";
 import argon2 from "argon2";
 import type { DB } from "./db";
@@ -43,53 +45,64 @@ export function session(db: DB, userId: string) {
   );
   return token;
 }
-export async function login(db: DB, username: string, password: string) {
+let dummyHash: Promise<string> | undefined;
+export async function login(
+  db: DB,
+  username: string,
+  password: string,
+  source = "local-development",
+) {
   const name = username.trim().toLowerCase(),
-    bucket = tokenHash(name),
+    bucket = tokenHash(source + "\0" + name),
     time = Date.now();
   db.transaction(() => {
-    db.prepare("DELETE FROM login_limits WHERE reset_at<?").run(time);
-    const current = db
-      .prepare("SELECT attempts FROM login_limits WHERE key=?")
-      .get(bucket) as { attempts: number } | undefined;
-    assert(
-      !current || current.attempts < 10,
-      429,
-      "Too many attempts. Try again in 15 minutes.",
-    );
-    db.prepare(
-      "INSERT INTO login_limits VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1",
-    ).run(bucket, time + 900000);
-  }).immediate();
-  const row = db.prepare("SELECT * FROM users WHERE username=?").get(name) as
-    (User & { password_hash: string }) | undefined;
-  // Hash a dummy password for missing accounts to avoid a fast username-existence response.
-  const valid = row
-    ? await argon2.verify(row.password_hash, password)
-    : await argon2.verify(
-        await passwordHash("dummy-password-for-timing"),
-        password,
-      );
-  assert(row && valid && row.active, 401, "Invalid username or password.");
-  return db
-    .transaction(() => {
-      const fresh = db
-        .prepare("SELECT password_hash,active FROM users WHERE id=?")
-        .get(row.id) as { password_hash: string; active: number };
+    db.prepare("DELETE FROM login_limits WHERE reset_at<=?").run(time);
+    for (const [key, maximum, window] of [
+      ["source:" + tokenHash(source), limit("LOGIN_SOURCE_LIMIT", 30), 60000],
+      [bucket, limit("LOGIN_ACCOUNT_SOURCE_LIMIT", 10), 900000],
+    ] as const) {
+      const current = db
+        .prepare("SELECT attempts FROM login_limits WHERE key=?")
+        .get(key) as { attempts: number } | undefined;
       assert(
-        fresh.active && fresh.password_hash === row.password_hash,
-        401,
-        "Account changed. Please sign in again.",
+        !current || current.attempts < maximum,
+        429,
+        "Too many attempts. Try again later.",
       );
-      db.prepare("DELETE FROM login_limits WHERE key=?").run(bucket);
-      return {
-        token: session(db, row.id),
-        user: db
-          .prepare(`SELECT ${userColumns} FROM users WHERE id=?`)
-          .get(row.id) as User,
-      };
-    })
-    .immediate();
+      db.prepare(
+        "INSERT INTO login_limits VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1",
+      ).run(key, time + window);
+    }
+  }).immediate();
+  return passwordWork(db, async () => {
+    const row = db.prepare("SELECT * FROM users WHERE username=?").get(name) as
+      (User & { password_hash: string }) | undefined;
+    // Cache rejection too: initialization failure fails every attempt safely.
+    // Both account paths wait for initialization and then perform one verify.
+    dummyHash ??= passwordHash("dummy-password-for-timing");
+    const dummy = await dummyHash;
+    const valid = await argon2.verify(row?.password_hash || dummy, password);
+    assert(row && valid && row.active, 401, "Invalid username or password.");
+    return db
+      .transaction(() => {
+        const fresh = db
+          .prepare("SELECT password_hash,active FROM users WHERE id=?")
+          .get(row.id) as { password_hash: string; active: number };
+        assert(
+          fresh.active && fresh.password_hash === row.password_hash,
+          401,
+          "Invalid username or password.",
+        );
+        db.prepare("DELETE FROM login_limits WHERE key=?").run(bucket);
+        return {
+          token: session(db, row.id),
+          user: db
+            .prepare(`SELECT ${userColumns} FROM users WHERE id=?`)
+            .get(row.id) as User,
+        };
+      })
+      .immediate();
+  });
 }
 export async function changePassword(
   db: DB,
@@ -101,7 +114,7 @@ export async function changePassword(
     .prepare("SELECT password_hash FROM users WHERE id=?")
     .get(user.id) as { password_hash: string };
   assert(
-    await argon2.verify(row.password_hash, current),
+    await passwordWork(db, () => argon2.verify(row.password_hash, current)),
     400,
     "Current password is incorrect.",
   );

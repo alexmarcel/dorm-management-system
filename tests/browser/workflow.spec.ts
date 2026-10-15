@@ -246,10 +246,10 @@ test("complete warden setup, student reporting with compressed photo, shared upd
   expect((await student.request.get('/api/me')).status()).toBe(401);
   expect((await page.request.get('/api/reports/'+reportId)).status()).toBe(200);
   expect((await page.request.post('/api/students/'+studentId,{headers:{Origin:'http://localhost:3100'},data:{action:'reset',password:'Another-password-123'}})).status()).toBe(404);
-  await page.getByLabel('Account status',{exact:true}).selectOption('archived');await expect(row).toBeVisible();
+  await page.getByRole('combobox',{name:'Account status',exact:true}).selectOption('archived');await expect(row).toBeVisible();
   await expect(row.getByRole('button',{name:'Edit Sara Student'})).toHaveCount(0);
   page.once('dialog',d=>d.accept());await row.getByRole('button',{name:'Restore Sara Student'}).click();await expect(row).toHaveCount(0);
-  await page.getByLabel('Account status',{exact:true}).selectOption('');await expect(row).toBeVisible();
+  await page.getByRole('combobox',{name:'Account status',exact:true}).selectOption('');await expect(row).toBeVisible();
   expect((await student.request.get('/api/me')).status()).toBe(401);
   await studentContext.close();
   await second.close();

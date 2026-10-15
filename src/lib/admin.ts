@@ -1,3 +1,4 @@
+import { passwordWork } from "./password-work";
 import { z } from "zod";
 import argon2 from "argon2";
 import { parse } from "csv-parse/sync";
@@ -104,7 +105,7 @@ export async function verifyAdminPassword(
     .prepare("SELECT password_hash FROM users WHERE id=?")
     .get(actor.id) as { password_hash: string };
   assert(
-    await argon2.verify(row.password_hash, password),
+    await passwordWork(db, () => argon2.verify(row.password_hash, password)),
     400,
     "Current password is incorrect.",
   );
