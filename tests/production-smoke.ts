@@ -21,9 +21,9 @@ async function main() {
     DATABASE_PATH: path.join(directory, "test.db"),
     CONTROL_DIR: path.join(directory, "control"),
     UPLOAD_DIR: path.join(directory, "photos"),
-    TRUSTED_PROXY_MODE: "traefik-isolated",
-    PROXY_SHARED_SECRET: "a".repeat(64),
-    LOGIN_IDENTIFIER_KEY: "b".repeat(64),
+    TRUSTED_PROXY_MODE: undefined,
+    PROXY_SHARED_SECRET: undefined,
+    LOGIN_IDENTIFIER_KEY: undefined,
     QUOTA_WARDEN_MUTATIONS: "2",
   };
   const db = openDatabase(env.DATABASE_PATH);
@@ -60,6 +60,16 @@ async function main() {
       await new Promise((r) => setTimeout(r, 100));
     }
     assert.ok(ready, output);
+    const privateState = openDatabase(
+      path.join(env.CONTROL_DIR, "operations.db"),
+    );
+    assert.ok(
+      privateState
+        .prepare("SELECT 1 FROM state WHERE key=?")
+        .get("login_identifier_key"),
+      "Identifier key is initialized at startup.",
+    );
+    privateState.close();
     const html = await fetch(base);
     assert.equal(
       html.headers.get("strict-transport-security"),
@@ -95,8 +105,6 @@ async function main() {
       headers: {
         Origin: origin,
         "Content-Type": "application/json",
-        "X-Paini-Proxy-Secret": env.PROXY_SHARED_SECRET,
-        "X-Real-IP": "192.0.2.1",
       },
       body: JSON.stringify({
         username: "test",
@@ -172,7 +180,7 @@ async function main() {
     assert.deepEqual(violations, []);
     assert.deepEqual(errors, []);
     console.log(
-      "Production smoke passed: enforced CSP rendering, authenticated dashboard, cookie flags, HSTS, permissions, private API caching, authentication and exact-origin rejection.",
+      "Production smoke passed: startup and login without proxy secrets or forwarding headers, enforced CSP rendering, authenticated dashboard, cookie flags, HSTS, permissions, private API caching, authentication and exact-origin rejection.",
     );
   } finally {
     await browser.close();

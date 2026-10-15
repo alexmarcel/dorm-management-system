@@ -4,7 +4,8 @@ import argon2 from "argon2";
 import { openDatabase, migrate } from "../src/lib/db";
 import { login, tokenHash } from "../src/lib/auth";
 import { securityConfig } from "../src/lib/security-config";
-import { loginSource } from "../src/lib/login-source";
+import { loginSource, UNKNOWN_SOURCE } from "../src/lib/login-source";
+import { loginIdentifierKey } from "../src/lib/login-identity";
 import { consume, uploadQuota, quotaLimit } from "../src/lib/quotas";
 import {
   createReport,
@@ -34,12 +35,9 @@ const status = (n: number) => (e: unknown) =>
 const production = {
   NODE_ENV: "production" as const,
   APP_ORIGIN: "https://paini.example.invalid",
-  TRUSTED_PROXY_MODE: "traefik-isolated",
-  PROXY_SHARED_SECRET: "a".repeat(64),
-  LOGIN_IDENTIFIER_KEY: "b".repeat(64),
 };
 
-test("production origin and proxy configuration fail closed; development is explicit", () => {
+test("production requires only a valid HTTPS origin; legacy proxy variables are ignored", () => {
   for (const APP_ORIGIN of [
     undefined,
     "http://paini.example.invalid",
@@ -53,11 +51,17 @@ test("production origin and proxy configuration fail closed; development is expl
   ])
     assert.throws(() => securityConfig({ ...production, APP_ORIGIN }));
   assert.equal(securityConfig(production).origin, production.APP_ORIGIN);
-  assert.throws(() =>
-    securityConfig({ ...production, TRUSTED_PROXY_MODE: undefined }),
+  assert.equal(
+    securityConfig({
+      ...production,
+      TRUSTED_PROXY_MODE: "obsolete",
+      PROXY_SHARED_SECRET: "invalid",
+      LOGIN_IDENTIFIER_KEY: "invalid",
+    }).origin,
+    production.APP_ORIGIN,
   );
   assert.throws(() =>
-    securityConfig({ ...production, LOGIN_IDENTIFIER_KEY: "bad" }),
+    securityConfig({ ...production, LOGIN_GLOBAL_LIMIT: "0" }),
   );
   assert.equal(
     securityConfig({ NODE_ENV: "development" }).origin,
@@ -65,27 +69,50 @@ test("production origin and proxy configuration fail closed; development is expl
   );
 });
 
-test("forwarding headers cannot override authenticated proxy identity", () => {
-  const saved = { ...process.env };
-  Object.assign(process.env, production);
-  try {
-    assert.throws(
-      () => loginSource(new Headers({ "x-forwarded-for": "1.2.3.4" })),
-      status(403),
-    );
-    const h = new Headers({
-      "x-paini-proxy-secret": production.PROXY_SHARED_SECRET,
+test("forwarding addresses are validated best-effort hints; secrets are not required", () => {
+  const key = Buffer.alloc(32, 7);
+  const identify = (headers: Record<string, string>) =>
+    loginSource(new Headers(headers), key);
+  const source = identify({ "x-real-ip": "192.0.2.1" });
+  assert.match(source, /^[a-f0-9]{64}$/);
+  assert.equal(
+    identify({
       "x-real-ip": "192.0.2.1",
-    });
-    const source = loginSource(h);
-    h.set("x-forwarded-for", "8.8.8.8");
-    assert.equal(loginSource(h), source);
-    assert.ok(!source.includes("192.0.2"));
-    h.set("x-real-ip", "192.0.2.1, 8.8.8.8");
-    assert.throws(() => loginSource(h), status(403));
-  } finally {
-    process.env = saved;
-  }
+      "x-forwarded-for": "198.51.100.1",
+      "x-paini-proxy-secret": "wrong",
+    }),
+    source,
+  );
+  assert.equal(
+    identify({
+      "x-real-ip": "invalid",
+      "x-forwarded-for": "garbage, 192.0.2.1, invalid",
+    }),
+    source,
+  );
+  assert.equal(
+    identify({ "x-forwarded-for": "198.51.100.1, 192.0.2.1" }),
+    source,
+  );
+  assert.notEqual(identify({ "x-real-ip": "192.0.2.2" }), source); // A hint can be forged.
+  assert.equal(
+    identify({ "x-real-ip": "2001:0db8:0:0:0:0:0:1" }),
+    identify({ "x-real-ip": "2001:db8::1" }),
+  );
+  for (const value of [
+    "",
+    "not-an-ip",
+    "192.0.2.1:443",
+    "[::1]",
+    "192.0.2.1, 192.0.2.2",
+    "fe80::1%eth0",
+  ])
+    assert.equal(identify({ "x-real-ip": value }), UNKNOWN_SOURCE);
+  assert.equal(
+    identify({ "x-forwarded-for": "invalid, unknown" }),
+    UNKNOWN_SOURCE,
+  );
+  assert.equal(identify({}), UNKNOWN_SOURCE);
 });
 
 test("login has one shared dummy initialization, one verify, source/account isolation, and bounded work", async () => {
@@ -423,5 +450,160 @@ test("session cookies remain secure in production even with a bad origin, and ex
     assert.equal(sessionCookieOptions(false).maxAge, 0);
   } finally {
     process.env = saved;
+  }
+});
+
+test("global ceiling cannot be bypassed by rotating source hints and usernames; success preserves global history", async () => {
+  const f = fixture(),
+    saved = { ...process.env },
+    verify = argon2.verify;
+  let calls = 0;
+  argon2.verify = async (_hash, password) => {
+    calls++;
+    return password === "correct";
+  };
+  Object.assign(process.env, { LOGIN_GLOBAL_LIMIT: "5" });
+  try {
+    for (let i = 0; i < 4; i++)
+      await assert.rejects(
+        login(f.db, "absent" + i, "bad", "forged" + i),
+        status(401),
+      );
+    await login(f.db, "alice", "correct", "different");
+    await assert.rejects(
+      login(f.db, "bob", "correct", "another-source"),
+      status(429),
+    );
+    assert.equal(calls, 5);
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT attempts FROM login_limits WHERE key='global'")
+          .get() as { attempts: number }
+      ).attempts,
+      5,
+    );
+    f.db.prepare("UPDATE login_limits SET reset_at=0 WHERE key='global'").run();
+    await login(f.db, "bob", "correct", "another-source");
+  } finally {
+    argon2.verify = verify;
+    process.env = saved;
+    f.db.close();
+  }
+});
+
+test("unknown sources share a bounded bucket without username-only lockouts", async () => {
+  const f = fixture(),
+    saved = { ...process.env },
+    verify = argon2.verify;
+  let calls = 0;
+  argon2.verify = async (_hash, password) => {
+    calls++;
+    return password === "correct";
+  };
+  Object.assign(process.env, {
+    LOGIN_UNKNOWN_SOURCE_LIMIT: "12",
+    LOGIN_GLOBAL_LIMIT: "30",
+  });
+  try {
+    for (let i = 0; i < 10; i++)
+      await assert.rejects(login(f.db, "alice", "bad"), status(401));
+    await login(f.db, "alice", "correct"); // No 15-minute username lockout.
+    await assert.rejects(login(f.db, "rotated", "bad"), status(401));
+    await assert.rejects(login(f.db, "bob", "correct"), status(429));
+    assert.equal(calls, 12);
+    await login(f.db, "alice", "correct", "valid-source-signal");
+    assert.equal(
+      (
+        f.db
+          .prepare("SELECT attempts FROM login_limits WHERE key=?")
+          .get(UNKNOWN_SOURCE) as { attempts: number }
+      ).attempts,
+      12,
+    );
+    assert.equal(
+      f.db
+        .prepare("SELECT 1 FROM login_limits WHERE key=?")
+        .get(tokenHash(UNKNOWN_SOURCE + "\0alice")),
+      undefined,
+    );
+  } finally {
+    argon2.verify = verify;
+    process.env = saved;
+    f.db.close();
+  }
+});
+
+test("internal identifier key persists and corrupt state fails closed", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs"),
+    { tmpdir } = await import("node:os"),
+    path = await import("node:path");
+  const directory = mkdtempSync(path.join(tmpdir(), "paini-identity-")),
+    file = path.join(directory, "control.db");
+  let db = openDatabase(file);
+  try {
+    db.exec("CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
+    const key = loginIdentifierKey(db);
+    assert.equal(key.length, 32);
+    assert.ok(key.equals(loginIdentifierKey(db)));
+    db.close();
+    db = openDatabase(file);
+    assert.ok(key.equals(loginIdentifierKey(db)));
+    const other = openDatabase(":memory:");
+    try {
+      other.exec(
+        "CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT NOT NULL)",
+      );
+      assert.ok(!key.equals(loginIdentifierKey(other)));
+    } finally {
+      other.close();
+    }
+    db.prepare("UPDATE state SET value=? WHERE key=?").run(
+      '"invalid"',
+      "login_identifier_key",
+    );
+    assert.throws(() => loginIdentifierKey(db), {
+      message: "Private login identifier state is invalid.",
+    });
+  } finally {
+    db.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("simultaneous processes initialize and reuse one private identifier key", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs"),
+    { tmpdir } = await import("node:os"),
+    path = await import("node:path");
+  const { execFile } = await import("node:child_process"),
+    { promisify } = await import("node:util"),
+    run = promisify(execFile);
+  const directory = mkdtempSync(path.join(tmpdir(), "paini-identity-"));
+  try {
+    const identify = () =>
+      run(
+        process.execPath,
+        ["--import", "tsx", "tests/helpers/login-identity.ts"],
+        { env: { ...process.env, CONTROL_DIR: directory } },
+      );
+    const results = await Promise.all(Array.from({ length: 4 }, identify));
+    assert.equal(new Set(results.map((r) => r.stdout)).size, 1);
+    assert.match(results[0].stdout, /^[a-f0-9]{64}$/);
+    assert.equal((await identify()).stdout, results[0].stdout);
+    const db = openDatabase(path.join(directory, "operations.db"));
+    try {
+      assert.equal(
+        (
+          db
+            .prepare("SELECT COUNT(*) n FROM state WHERE key=?")
+            .get("login_identifier_key") as { n: number }
+        ).n,
+        1,
+      );
+    } finally {
+      db.close();
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });

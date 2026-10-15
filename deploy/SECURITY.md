@@ -1,66 +1,82 @@
 # Security deployment requirements
 
-Production requires APP_ORIGIN, TRUSTED_PROXY_MODE=traefik-isolated,
-PROXY_SHARED_SECRET and LOGIN_IDENTIFIER_KEY. Use an exact HTTPS origin such as
-https://paini.example.invalid (placeholder, no slash/path/query/credentials).
-Generate two independent secrets with `openssl rand -hex 32`. Keep them out of
-source control and access logs. Startup rejects missing or malformed values.
-NODE_ENV=production always produces Secure, HttpOnly, SameSite=Strict, Path=/
-session cookies with the existing 24-hour lifetime. Development alone defaults to
-http://localhost:3000; specify APP_ORIGIN explicitly for another local port.
+Production requires an exact HTTPS APP_ORIGIN, such as
+https://paini.example.invalid (placeholder, no trailing slash, path, query,
+fragment, wildcard or embedded credentials). Startup rejects a missing or invalid
+production origin. NODE_ENV=production always produces Secure, HttpOnly,
+SameSite=Strict, Path=/ session cookies with the existing 24-hour lifetime.
+Development alone defaults to http://localhost:3000; specify APP_ORIGIN for
+another local port.
 
-## Traefik trust boundary
+The existing Docker/Traefik arrangement can remain unchanged. PAINI does not
+require TRUSTED_PROXY_MODE, PROXY_SHARED_SECRET, LOGIN_IDENTIFIER_KEY,
+X-Paini-Proxy-Secret, a dedicated Docker network, or Traefik middleware/static
+configuration changes. The three legacy variables and secret header are ignored
+and may be removed. There is no additional proxy secret to manage or rotate.
+Keep the existing persistent DATABASE_PATH, UPLOAD_DIR and CONTROL_DIR settings.
 
-The supported topology is Internet -> TLS Traefik -> isolated PAINI backend on
-one host. Bind the app to loopback (`npm start -- --hostname 127.0.0.1`) when
-Traefik runs on the host, or an exclusive private container network with no
-published backend port. Restrict network access to Traefik. NextRequest does not
-expose the TCP peer, so the app cannot independently inspect the ingress peer.
-An authenticated proxy header supplements, but does not replace, isolation.
+## Best-effort source addresses
 
-In Traefik static configuration set the public entrypoint's
-`forwardedHeaders.insecure: false`, `forwardedHeaders.trustedIPs: []` and leave
-PROXY protocol disabled. No upstream CDN/load balancer is supported by this
-configuration. Traefik removes untrusted forwarding headers and derives
-X-Real-IP from the TCP peer. Do not install middleware that restores client
-X-Real-IP. See the [Traefik entrypoint documentation](https://doc.traefik.io/traefik/v3.6/reference/install-configuration/entrypoints/).
+Login uses a syntactically valid X-Real-IP first, otherwise the rightmost valid
+address in X-Forwarded-For (the hop closest to the application), otherwise the
+stable unknown-source bucket. Each candidate is checked with Node isIP(); ports,
+brackets, scope IDs and malformed strings are not used as identifiers. IPv6
+spelling is canonicalized. Addresses are HMACed before reaching login counters;
+raw addresses are not stored in PAINI's database or included in application
+errors, logs or responses.
 
-Configure a headers middleware on EVERY PAINI router, including login:
+Forwarding headers are NOT authenticated. An attacker may spoof/rotate them,
+or several users may share a proxy address. Source and account/source limits are
+supplementary. The application-wide rate ceiling and shared password-work cap
+remain effective regardless of header values. Missing headers do not return 403
+or disable throttling. Unknown sources share a short-window bucket; there is no
+username-only account lockout. A global/fallback ceiling can temporarily affect
+legitimate logins during sustained abuse: this is the availability trade-off of
+bounded work without an authenticated client address. Tune limits for actual load.
 
-```yaml
-http:
-  middlewares:
-    paini-ingress:
-      headers:
-        customRequestHeaders:
-          X-Paini-Proxy-Secret: "REPLACE_WITH_PRIVATE_PROXY_SHARED_SECRET"
-```
+## Internal identifier key
 
-Traefik must overwrite the incoming secret header. Set the same private value
-in PAINI's PROXY_SHARED_SECRET; use a distinct LOGIN_IDENTIFIER_KEY only in
-PAINI. The app requires an authenticated secret plus one syntactically valid
-X-Real-IP. X-Forwarded-For is never used. It stores keyed source identifiers,
-not IP addresses. Missing/malformed headers reject login instead of falling
-back to an attacker-controlled value. Do not expose the shared secret in logs.
-The previous nginx example alone is no longer a supported production ingress.
+PAINI generates a cryptographically random 32-byte key automatically at startup
+in the existing private CONTROL_DIR/operations.db state table. An IMMEDIATE
+transaction serializes concurrent initialization; restarts reuse the same key.
+The key is not returned by any API or logged. No environment variable, new
+migration, secret duplication or operator rotation is required. Invalid existing
+key state fails safely rather than silently switching identity or disabling limits.
 
-Before opening access, verify the actual deployment: direct backend access from
-outside must fail; missing/wrong secret on the private backend must return 403;
-login attempts through Traefik with forged X-Real-IP and X-Forwarded-For must
-still share the same source limit. Check a second real source remains able to
-sign in. Configuration validation cannot prove firewall or Traefik settings;
-these deployment checks are mandatory, particularly after proxy upgrades.
+Keep CONTROL_DIR persistent and private, as already required for maintenance
+state. Normal application backup/restore leaves this store untouched. Complete
+archives intentionally exclude control state and strip all login counters, so
+the key is not needed to interpret restored data and is not exported in archives.
+Restoring an archive on a new installation creates a fresh key automatically;
+restoring on the same installation keeps the existing key. Loss of control state
+rotates source identifiers but cannot disable the independent global ceiling or
+password concurrency cap. No changes to backup validation/extraction are needed.
 
 ## Limits and persistence
 
-All overrides are positive integer environment variables; restart after changes.
+All overrides are optional positive integer environment variables; restart after
+changes. Missing overrides use defaults; invalid numeric overrides are rejected.
 Defaults are in src/lib/security-config.ts, src/lib/auth.ts and src/lib/quotas.ts,
-and listed in .env.example. LOGIN_SOURCE_LIMIT=30 per 60 seconds,
-LOGIN_ACCOUNT_SOURCE_LIMIT=10 per 15 minutes, LOGIN_CONCURRENCY=4 concurrent
-password-verification jobs. Account keys include the source; success clears only
-that pair, preserving source abuse history. Missing and existing users each
-receive one verification; one shared dummy-hash initialization per process uses
-the unchanged Argon2id parameters. Initialization errors remain failures.
+and listed in .env.example.
+
+| Login override | Default | Scope/window |
+| --- | ---: | --- |
+| LOGIN_GLOBAL_LIMIT | 120 | All admitted login attempts / 60 seconds |
+| LOGIN_UNKNOWN_SOURCE_LIMIT | 60 | All unknown-source attempts / 60 seconds |
+| LOGIN_SOURCE_LIMIT | 30 | Per best-effort source / 60 seconds |
+| LOGIN_ACCOUNT_SOURCE_LIMIT | 10 | Per account and source / 15 minutes |
+| LOGIN_CONCURRENCY | 4 | Concurrent password-verification jobs |
+
+Limits apply before Argon2 work, atomically in the shared application database.
+Requests already blocked by a source/account limit do not consume global budget.
+Successful login clears only its account/source pair; global, source and unknown
+history remain. Unknown sources have no account/source bucket, avoiding a
+username-only lockout affecting every client without headers. Global and unknown
+windows are short, with defaults above the per-source limit to allow normal use.
+Missing and existing users each receive one verification; one shared dummy-hash
+initialization per process uses unchanged Argon2id parameters. Initialization
+errors remain failures. Password changes and restore re-verification also use the
+shared concurrency cap.
 
 | Quota suffix | Student | Warden | Window |
 | --- | ---: | ---: | --- |

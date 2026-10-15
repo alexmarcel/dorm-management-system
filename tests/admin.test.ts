@@ -1,3 +1,4 @@
+import { loginIdentifierKey } from "../src/lib/login-identity";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -292,6 +293,7 @@ test("password policy defaults on, controls new/reset accounts and leaves existi
   );
 });
 test("complete backup restores closed reports/photos, checks schema/integrity and revokes sessions", async () => {
+  const identifierKey = loginIdentifierKey();
   db.prepare("UPDATE users SET must_change=0").run();
   const w = db.prepare("SELECT * FROM users WHERE role='warden'").get() as User,
     a = db.prepare("SELECT * FROM users WHERE username='aisyah'").get() as User;
@@ -349,6 +351,15 @@ test("complete backup restores closed reports/photos, checks schema/integrity an
       .n,
     0,
   );
+  assert.equal(
+    (
+      restored.prepare("SELECT COUNT(*) n FROM login_limits").get() as {
+        n: number;
+      }
+    ).n,
+    0,
+  );
+  assert.ok(identifierKey.equals(loginIdentifierKey()));
   assert.equal(getReport(restored, w, report.id).report_number, "RED-G-00001");
   assert.throws(() =>
     restored
@@ -382,6 +393,7 @@ test("complete backup restores closed reports/photos, checks schema/integrity an
   assert.equal(starts, 2);
   assert.equal(stops, 2);
   assert.deepEqual(runtimeStorage(), previous);
+  assert.ok(identifierKey.equals(loginIdentifierKey()));
   assert.equal(state("maintenance", true), false);
   assert.equal(
     (

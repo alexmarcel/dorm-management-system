@@ -17,17 +17,6 @@ export function securityConfig(env: NodeJS.ProcessEnv = process.env) {
       : !["http:", "https:"].includes(url.protocol))
   )
     throw new Error("APP_ORIGIN must be an exact HTTPS production origin.");
-  if (
-    production &&
-    (env.TRUSTED_PROXY_MODE !== "traefik-isolated" ||
-      !/^[a-f0-9]{64,}$/.test(env.PROXY_SHARED_SECRET || "") ||
-      !/^[a-f0-9]{64,}$/.test(env.LOGIN_IDENTIFIER_KEY || ""))
-  )
-    throw new Error(
-      "Configure isolated Traefik and independent proxy/login secrets.",
-    );
-  if (production && env.PROXY_SHARED_SECRET === env.LOGIN_IDENTIFIER_KEY)
-    throw new Error("Proxy and identifier secrets must differ.");
   for (const [key, value] of Object.entries(env)) {
     if (
       (key.startsWith("QUOTA_") ||
@@ -35,6 +24,8 @@ export function securityConfig(env: NodeJS.ProcessEnv = process.env) {
           "LOGIN_SOURCE_LIMIT",
           "LOGIN_ACCOUNT_SOURCE_LIMIT",
           "LOGIN_CONCURRENCY",
+          "LOGIN_GLOBAL_LIMIT",
+          "LOGIN_UNKNOWN_SOURCE_LIMIT",
         ].includes(key)) &&
       (!/^[1-9][0-9]*$/.test(value || "") ||
         !Number.isSafeInteger(Number(value)))

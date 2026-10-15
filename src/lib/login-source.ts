@@ -1,25 +1,28 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { isIP } from "node:net";
-import { securityConfig } from "./security-config";
-import { assert } from "./service";
-export function loginSource(headers: Headers) {
-  const { production } = securityConfig();
-  if (!production && process.env.TRUSTED_PROXY_MODE !== "traefik-isolated")
-    return "local-development";
-  const supplied = Buffer.from(headers.get("x-paini-proxy-secret") || "");
-  const expected = Buffer.from(process.env.PROXY_SHARED_SECRET || "");
-  assert(
-    expected.length >= 64 &&
-      supplied.length === expected.length &&
-      timingSafeEqual(supplied, expected),
-    403,
-    "Request source is not allowed.",
-  );
-  // The isolated Traefik ingress must overwrite X-Real-IP with its direct peer.
-  const ip = headers.get("x-real-ip") || "";
-  assert(isIP(ip) && !ip.includes("%"), 403, "Request source is not allowed.");
-  const canonical = isIP(ip) === 6 ? new URL(`http://[${ip}]/`).hostname : ip;
-  return createHmac("sha256", process.env.LOGIN_IDENTIFIER_KEY!)
-    .update(canonical)
+import { loginIdentifierKey } from "./login-identity";
+
+export const UNKNOWN_SOURCE = "unknown-source";
+
+function address(value: string): string | undefined {
+  const candidate = value.trim();
+  // Scope IDs and port/bracket syntax are not client-address identifiers.
+  const version = isIP(candidate);
+  if (!version || candidate.includes("%")) return undefined;
+  return version === 6 ? new URL(`http://[${candidate}]/`).hostname : candidate;
+}
+
+// These headers are supplementary, not authenticated. Global rate/concurrency
+// limits must remain effective even when clients forge or rotate every header.
+export function loginSource(headers: Headers, identifierKey?: Buffer): string {
+  let ip = address(headers.get("x-real-ip") || "");
+  if (!ip) {
+    // Use the rightmost valid X-Forwarded-For hop, closest to the application.
+    const chain = (headers.get("x-forwarded-for") || "").split(",");
+    for (let i = chain.length - 1; i >= 0 && !ip; i--) ip = address(chain[i]);
+  }
+  if (!ip) return UNKNOWN_SOURCE;
+  return createHmac("sha256", identifierKey ?? loginIdentifierKey())
+    .update(ip)
     .digest("hex");
 }

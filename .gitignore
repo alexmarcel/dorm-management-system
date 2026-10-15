@@ -54,6 +54,7 @@ paini-backup-*/
 paini-concurrency-*/
 paini-production-*/
 paini-quota-*/
+paini-identity-*/
 
 # Generated diagnostics and local caches
 *.tsbuildinfo

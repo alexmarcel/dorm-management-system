@@ -1,5 +1,6 @@
 import { limit } from "./security-config";
 import { passwordWork } from "./password-work";
+import { UNKNOWN_SOURCE } from "./login-source";
 import { randomBytes, createHash } from "node:crypto";
 import argon2 from "argon2";
 import type { DB } from "./db";
@@ -50,17 +51,30 @@ export async function login(
   db: DB,
   username: string,
   password: string,
-  source = "local-development",
+  source = UNKNOWN_SOURCE,
 ) {
   const name = username.trim().toLowerCase(),
     bucket = tokenHash(source + "\0" + name),
     time = Date.now();
   db.transaction(() => {
     db.prepare("DELETE FROM login_limits WHERE reset_at<=?").run(time);
-    for (const [key, maximum, window] of [
-      ["source:" + tokenHash(source), limit("LOGIN_SOURCE_LIMIT", 30), 60000],
-      [bucket, limit("LOGIN_ACCOUNT_SOURCE_LIMIT", 10), 900000],
-    ] as const) {
+    const buckets: [string, number, number][] = [
+      ["global", limit("LOGIN_GLOBAL_LIMIT", 120), 60000],
+    ];
+    if (source === UNKNOWN_SOURCE) {
+      // No account bucket without a source: that would be a username-only lockout.
+      buckets.push([
+        UNKNOWN_SOURCE,
+        limit("LOGIN_UNKNOWN_SOURCE_LIMIT", 60),
+        60000,
+      ]);
+    } else {
+      buckets.push(
+        ["source:" + tokenHash(source), limit("LOGIN_SOURCE_LIMIT", 30), 60000],
+        [bucket, limit("LOGIN_ACCOUNT_SOURCE_LIMIT", 10), 900000],
+      );
+    }
+    for (const [key, maximum, window] of buckets) {
       const current = db
         .prepare("SELECT attempts FROM login_limits WHERE key=?")
         .get(key) as { attempts: number } | undefined;

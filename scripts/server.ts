@@ -1,4 +1,5 @@
 import { securityConfig } from "../src/lib/security-config";
+import { loginIdentifierKey } from "../src/lib/login-identity";
 import "dotenv/config";
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
@@ -14,7 +15,11 @@ import { bootstrapAdmin } from "../src/lib/admin";
 import { runJob } from "../src/lib/jobs";
 
 async function main() {
-  securityConfig({ ...process.env, NODE_ENV: process.argv[2] === "dev" ? "development" : "production" });
+  securityConfig({
+    ...process.env,
+    NODE_ENV: process.argv[2] === "dev" ? "development" : "production",
+  });
+  loginIdentifierKey();
   control()
     .transaction(() => {
       const owner = state<number>("supervisor_pid", 0);
