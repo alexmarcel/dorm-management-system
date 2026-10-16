@@ -128,3 +128,65 @@
     padding: 12px;
   }
 }
+
+.limitForm {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.limitGroup {
+  margin: 0;
+  border: 1px solid #dce4e3;
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 0;
+}
+.limitGroup legend {
+  padding: 0 8px;
+  font-weight: 700;
+}
+.limitGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.limitGrid label {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.limitGrid input {
+  width: 100%;
+  min-width: 0;
+}
+.limitActions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+@media (max-width: 700px) {
+  .limitGrid {
+    grid-template-columns: 1fr;
+  }
+  .limitGroup {
+    padding: 12px;
+  }
+}
+.limitPanel {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+.limitPanel > h2,
+.limitPanel > p {
+  margin: 0;
+}
+.limitPanel > p {
+  max-width: 85ch;
+  line-height: 1.65;
+}
+@media (max-width: 700px) {
+  .limitPanel {
+    padding: 20px 16px;
+  }
+}

@@ -1,4 +1,5 @@
 "use client";
+import { DEFAULT_PHOTO_POLICY, type PhotoPolicy } from "./limit-definitions";
 import { useCallback, useEffect, useState } from "react";
 export async function api<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch("/api/" + path, {
@@ -53,7 +54,10 @@ export function useData<T>(path: string, refreshMs = 30000) {
   }, [path, refreshMs]);
   return { data, error, refresh, setData };
 }
-export async function compress(file: File): Promise<Blob> {
+export async function compress(
+  file: File,
+  policy: PhotoPolicy = DEFAULT_PHOTO_POLICY,
+): Promise<Blob> {
   if (
     !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
     file.size > 20 * 1024 * 1024
@@ -63,7 +67,10 @@ export async function compress(file: File): Promise<Blob> {
     imageOrientation: "from-image",
   });
   try {
-    let scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height)),
+    let scale = Math.min(
+        1,
+        policy.maxDimension / Math.max(bitmap.width, bitmap.height),
+      ),
       quality = 0.8;
     for (let attempt = 0; attempt < 24; attempt++) {
       const canvas = document.createElement("canvas");
@@ -79,7 +86,7 @@ export async function compress(file: File): Promise<Blob> {
         throw new Error(
           "This browser cannot compress WebP photos. Please use a current browser.",
         );
-      if (blob.size <= 500000) return blob;
+      if (blob.size <= policy.maxBytes) return blob;
       if (quality > 0.45) quality -= 0.1;
       else scale *= 0.8;
     }

@@ -1,3 +1,4 @@
+import { limitSnapshot, saveLimits } from "../src/lib/limit-settings";
 import { loginIdentifierKey } from "../src/lib/login-identity";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -336,6 +337,8 @@ test("complete backup restores closed reports/photos, checks schema/integrity an
     () => dashboard(db, actor(), new URLSearchParams()),
   ])
     assert.throws(fn, /Maintenance access/);
+  const limitsBefore = limitSnapshot(db);
+  const savedLimits = saveLimits(db, actor(), { revision: limitsBefore.revision, values: { ...limitsBefore.values, PHOTO_EXPIRY_HOURS: 48 } });
   const backup = await makeBackup(uid());
   assert.ok(
     backup.manifest.files.every(
@@ -360,6 +363,7 @@ test("complete backup restores closed reports/photos, checks schema/integrity an
     0,
   );
   assert.ok(identifierKey.equals(loginIdentifierKey()));
+  assert.deepEqual(limitSnapshot(restored).values, savedLimits.values);
   assert.equal(getReport(restored, w, report.id).report_number, "RED-G-00001");
   assert.throws(() =>
     restored

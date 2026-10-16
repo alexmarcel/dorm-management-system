@@ -1,3 +1,4 @@
+import { LIMIT_DEFINITIONS } from "./limit-definitions";
 export function securityConfig(env: NodeJS.ProcessEnv = process.env) {
   const production = env.NODE_ENV === "production";
   const raw = env.APP_ORIGIN || (production ? "" : "http://localhost:3000");
@@ -31,6 +32,16 @@ export function securityConfig(env: NodeJS.ProcessEnv = process.env) {
         !Number.isSafeInteger(Number(value)))
     )
       throw new Error(`Invalid limit: ${key}`);
+  }
+  for (const definition of LIMIT_DEFINITIONS) {
+    const value = env[definition.key];
+    if (
+      value !== undefined &&
+      (!/^[1-9][0-9]*$/.test(value) ||
+        Number(value) < definition.min ||
+        Number(value) > definition.max)
+    )
+      throw new Error(`Invalid limit: ${definition.key}`);
   }
   return { production, origin: url.origin };
 }

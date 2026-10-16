@@ -1,4 +1,4 @@
-import { limit } from "./security-config";
+import { configuredLimit } from "./limit-settings";
 import { passwordWork } from "./password-work";
 import { UNKNOWN_SOURCE } from "./login-source";
 import { randomBytes, createHash } from "node:crypto";
@@ -59,19 +59,31 @@ export async function login(
   db.transaction(() => {
     db.prepare("DELETE FROM login_limits WHERE reset_at<=?").run(time);
     const buckets: [string, number, number][] = [
-      ["global", limit("LOGIN_GLOBAL_LIMIT", 120), 60000],
+      [
+        "global",
+        configuredLimit(db, "LOGIN_GLOBAL_LIMIT"),
+        configuredLimit(db, "LOGIN_WINDOW_SECONDS") * 1000,
+      ],
     ];
     if (source === UNKNOWN_SOURCE) {
       // No account bucket without a source: that would be a username-only lockout.
       buckets.push([
         UNKNOWN_SOURCE,
-        limit("LOGIN_UNKNOWN_SOURCE_LIMIT", 60),
-        60000,
+        configuredLimit(db, "LOGIN_UNKNOWN_SOURCE_LIMIT"),
+        configuredLimit(db, "LOGIN_WINDOW_SECONDS") * 1000,
       ]);
     } else {
       buckets.push(
-        ["source:" + tokenHash(source), limit("LOGIN_SOURCE_LIMIT", 30), 60000],
-        [bucket, limit("LOGIN_ACCOUNT_SOURCE_LIMIT", 10), 900000],
+        [
+          "source:" + tokenHash(source),
+          configuredLimit(db, "LOGIN_SOURCE_LIMIT"),
+          configuredLimit(db, "LOGIN_WINDOW_SECONDS") * 1000,
+        ],
+        [
+          bucket,
+          configuredLimit(db, "LOGIN_ACCOUNT_SOURCE_LIMIT"),
+          configuredLimit(db, "LOGIN_ACCOUNT_WINDOW_SECONDS") * 1000,
+        ],
       );
     }
     for (const [key, maximum, window] of buckets) {

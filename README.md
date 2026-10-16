@@ -169,6 +169,11 @@ Tests use isolated databases/control stores and synthetic credentials. Browser s
 6. Let the service manager restart the supervisor on failure. Keep its child in the same service/process group so stopping the service stops both. One supervisor may own a control directory. Preserve it between releases.
 7. Configure wardens/locations/students. Verify submission through closure and staging restoration before admitting users. Actual S3 credentials and hosting require deployment-specific verification.
 
+Superadmins can adjust login limits, role quotas, time windows and photo limits in
+**Settings > Quotas and limits**. Changes are saved atomically and audited, take
+effect without restarting, and preserve existing usage. Apply migration 005 when
+upgrading; existing photo safety ceilings remain in place.
+
 ## Backup, restore and retention
 
 Settings → Backup and Restore → Create backup queues a background job. It uses SQLite's online backup API and copies all committed photos referenced by that snapshot. A tar.gz manifest records schema, timestamp, counts, sizes and SHA-256 checksums. Missing photos fail the job. Environment files, infrastructure secrets, logs, caches and temporary uploads are excluded. Sessions are stripped. Superadmin downloads are audited. **Archives contain personal information and password hashes: encrypt off-server copies and restrict access.**

@@ -1,3 +1,4 @@
+import { configuredLimit, uploadExpirySql } from "./limit-settings";
 import { consume } from "./quotas";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -317,12 +318,13 @@ export function listReports(db: DB, actor: User, p: URLSearchParams) {
   };
 }
 export function attach(db: DB, actor: User, eventId: string, ids: string[]) {
+  assert(ids.length <= configuredLimit(db, "PHOTO_MAX_ATTACHMENTS"), 400, "Too many photos for this report or event.");
   for (const id of ids) {
     const photo = db
       .prepare(
-        "SELECT u.* FROM uploads u LEFT JOIN attachments a ON a.id=u.id WHERE u.id=? AND u.owner_id=? AND a.id IS NULL AND u.created_at>?",
+        `SELECT u.* FROM uploads u LEFT JOIN attachments a ON a.id=u.id LEFT JOIN upload_expirations x ON x.upload_id=u.id WHERE u.id=? AND u.owner_id=? AND a.id IS NULL AND ${uploadExpirySql}>?`,
       )
-      .get(id, actor.id, new Date(Date.now() - 86400000).toISOString());
+      .get(id, actor.id, now());
     assert(
       photo,
       400,

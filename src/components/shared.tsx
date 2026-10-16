@@ -10,7 +10,11 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import { type Locations, type Report, dateTime } from "@/lib/constants";
-import { compress } from "@/lib/client";
+import {
+  DEFAULT_PHOTO_POLICY,
+  type PhotoPolicy,
+} from "@/lib/limit-definitions";
+import { compress, useData } from "@/lib/client";
 export function ErrorBox({ message }: { message: string }) {
   const { t, locale } = useLocale();
 
@@ -267,6 +271,8 @@ export function Photos({
 }) {
   const { t, locale } = useLocale();
 
+  const uploadPolicy = useData<PhotoPolicy>("upload-policy");
+  const policy = uploadPolicy.data ?? DEFAULT_PHOTO_POLICY;
   const [error, setError] = useState(""),
     urls = useRef<string[]>([]);
   useEffect(
@@ -277,7 +283,9 @@ export function Photos({
     <div className="photos">
       <label>
         {t("Photos")}
-        <span className="muted">{t("optional · up to 5")}</span>
+        <span className="muted">
+          {t("Optional, up to {count}", { count: policy.maxAttachments })}
+        </span>
       </label>
       <div className="photo-grid">
         {photos.map((p, i) => (
@@ -313,20 +321,22 @@ export function Photos({
           type="file"
           accept="image/jpeg,image/png,image/webp"
           multiple
-          disabled={busy || photos.length >= 5}
+          disabled={
+            busy || !uploadPolicy.data || photos.length >= policy.maxAttachments
+          }
           onChange={async (e) => {
             const files = Array.from(e.target.files || []);
             e.target.value = "";
             setError("");
-            if (files.length + photos.length > 5) {
-              setError("Choose no more than five photos.");
+            if (files.length + photos.length > policy.maxAttachments) {
+              setError("Too many photos for this report or event.");
               return;
             }
             setBusy(true);
             const added: PhotoDraft[] = [];
             try {
               for (const file of files) {
-                const blob = await compress(file),
+                const blob = await compress(file, policy),
                   preview = URL.createObjectURL(blob);
                 urls.current.push(preview);
                 added.push({ name: file.name, blob, preview });
@@ -341,7 +351,7 @@ export function Photos({
           }}
         />
       </label>
-      <ErrorBox message={error} />
+      <ErrorBox message={error || uploadPolicy.error} />
     </div>
   );
 }

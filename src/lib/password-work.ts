@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DB } from "./db";
 import { assert } from "./service";
-import { limit } from "./security-config";
+import { configuredLimit } from "./limit-settings";
 // Shared SQLite, same-host workers. Never expire a live worker's lease while
 // Argon2 may still be running. Dead workers are reclaimed on the next attempt.
 export async function passwordWork<T>(db: DB, work: () => Promise<T>) {
@@ -21,7 +21,7 @@ export async function passwordWork<T>(db: DB, work: () => Promise<T>) {
       n: number;
     };
     assert(
-      count.n < limit("LOGIN_CONCURRENCY", 4),
+      count.n < configuredLimit(db, "LOGIN_CONCURRENCY"),
       429,
       "Too many attempts. Try again later.",
     );

@@ -6,6 +6,7 @@ test("Malay default, persistent drafts, superadmin settings, CSV, authorization 
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
+  expect((await page.request.get("/api/settings/limits")).status()).toBe(401);
   await expect(page.locator("html")).toHaveAttribute("lang", "ms");
   await page.getByLabel("Nama pengguna", { exact: true }).fill("testadmin");
   await page
@@ -19,7 +20,9 @@ test("Malay default, persistent drafts, superadmin settings, CSV, authorization 
     "TestAdminPassword123",
   );
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByLabel("Current password").fill("TestAdminPassword123");
+  await page
+    .getByLabel("Current password", { exact: true })
+    .fill("TestAdminPassword123");
   await page.getByLabel(/^New password/).fill("ChangedAdminPassword123");
   await page.getByLabel("Confirm new password").fill("ChangedAdminPassword123");
   await page.getByRole("button", { name: "Change password" }).click();
@@ -45,6 +48,91 @@ test("Malay default, persistent drafts, superadmin settings, CSV, authorization 
   await expect(page.getByText("Password-change policy saved.")).toBeVisible();
   await page.reload();
   await expect(policy).not.toBeChecked();
+  await page.getByRole("tab", { name: "Quotas and limits" }).click();
+  const initialLimits = await (
+    await page.request.get("/api/settings/limits")
+  ).json();
+  await page
+    .getByLabel("All login attempts per window", { exact: true })
+    .fill("121");
+  await page
+    .getByLabel("Photos per report or event", { exact: true })
+    .fill("2");
+  await page
+    .getByRole("button", { name: "Save quotas and limits", exact: true })
+    .click();
+  await expect(
+    page.getByText("Quotas and limits saved.", { exact: true }),
+  ).toBeVisible();
+  expect(
+    (
+      await page.request.post("/api/settings/limits", {
+        headers: { Origin: "https://hostile.invalid" },
+        data: {
+          revision: initialLimits.revision,
+          values: initialLimits.values,
+        },
+      })
+    ).status(),
+  ).toBe(403);
+  expect(
+    (
+      await page.request.post("/api/settings/limits", {
+        headers: { Origin: "http://localhost:3100" },
+        data: {
+          revision: initialLimits.revision,
+          values: initialLimits.values,
+        },
+      })
+    ).status(),
+  ).toBe(409);
+  await page.reload();
+  await page.getByRole("tab", { name: "Quotas and limits" }).click();
+  await expect(
+    page.getByLabel("All login attempts per window", { exact: true }),
+  ).toHaveValue("121");
+  await expect(
+    page.getByLabel("Photos per report or event", { exact: true }),
+  ).toHaveValue("2");
+  await page.screenshot({
+    path: "test-results/settings-limits-desktop.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/settings-limits-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: "test-results/settings-limits-mobile-viewport.png",
+    animations: "disabled",
+  });
+  await page
+    .getByRole("button", { name: "Bahasa Melayu", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Kuota dan had", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "English", exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page
+    .getByRole("button", { name: "Use default values", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Save quotas and limits", exact: true })
+    .click();
+  await expect(
+    page.getByText("Quotas and limits saved.", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Warden Accounts" }).click();
   await page.getByRole("button", { name: "Add warden" }).click();
   await page.getByLabel("Full name").fill("Settings Warden");
   await page.getByLabel("Username", { exact: true }).fill("settingswarden");
@@ -61,6 +149,10 @@ test("Malay default, persistent drafts, superadmin settings, CSV, authorization 
     data: { username: "settingswarden", password: "WardenTemporary123" },
   });
   expect((await login.json()).user.must_change).toBe(0);
+  expect((await other.get("/api/settings/limits")).status()).toBe(403);
+  expect(
+    (await other.post("/api/settings/limits", { data: {} })).status(),
+  ).toBe(403);
   expect(
     (
       await other.post("/api/settings/security", {
@@ -113,7 +205,10 @@ test("Malay default, persistent drafts, superadmin settings, CSV, authorization 
   expect(await page.locator("body").innerText()).not.toContain(
     "TemporaryStudent123",
   );
-  await page.screenshot({path:'test-results/settings-csv-desktop.png',fullPage:true});
+  await page.screenshot({
+    path: "test-results/settings-csv-desktop.png",
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "Confirm import" }).click();
   await expect(page.getByText("1 students imported.")).toBeVisible();
   await page
@@ -125,11 +220,15 @@ test("Malay default, persistent drafts, superadmin settings, CSV, authorization 
   await expect(
     page.getByRole("cell", { name: "settingswarden", exact: true }),
   ).toBeVisible();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-  const filterInset=await page.locator('.filter-row').evaluate(el=>{
-    const panel=el.closest('.panel')!.getBoundingClientRect();
-    const field=el.querySelector('label')!.getBoundingClientRect();
-    return field.left-panel.left;
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  const filterInset = await page.locator(".filter-row").evaluate((el) => {
+    const panel = el.closest(".panel")!.getBoundingClientRect();
+    const field = el.querySelector("label")!.getBoundingClientRect();
+    return field.left - panel.left;
   });
   expect(filterInset).toBeGreaterThanOrEqual(16);
   await page.screenshot({
@@ -172,7 +271,9 @@ test("Malay default, persistent drafts, superadmin settings, CSV, authorization 
     fullPage: true,
   });
   await page.getByRole("button", { name: "Restore this backup" }).click();
-  await page.getByLabel("Current password").fill("ChangedAdminPassword123");
+  await page
+    .getByLabel("Current password", { exact: true })
+    .fill("ChangedAdminPassword123");
   await page.getByRole("dialog").getByRole("checkbox").check();
   await page
     .getByRole("button", { name: "Start restore", exact: true })

@@ -1,3 +1,4 @@
+import { uploadExpirySql } from "../src/lib/limit-settings";
 import "dotenv/config";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
@@ -82,10 +83,10 @@ async function main() {
     if (!lease)
       throw new Error("Maintenance in progress. Retry cleanup later.");
     try {
-      const cutoff = new Date(Date.now() - 86400000).toISOString();
+      const cutoff = new Date().toISOString();
       const items = db
         .prepare(
-          "SELECT u.id,u.object_key FROM uploads u LEFT JOIN attachments a ON a.id=u.id WHERE a.id IS NULL AND u.created_at<?",
+          `SELECT u.id,u.object_key FROM uploads u LEFT JOIN attachments a ON a.id=u.id LEFT JOIN upload_expirations x ON x.upload_id=u.id WHERE a.id IS NULL AND ${uploadExpirySql}<?`,
         )
         .all(cutoff) as { id: string; object_key: string }[];
       // Expired uploads cannot be attached by the API, so cleanup cannot race valid attachment finalization.

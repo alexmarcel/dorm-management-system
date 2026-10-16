@@ -54,10 +54,32 @@ password concurrency cap. No changes to backup validation/extraction are needed.
 
 ## Limits and persistence
 
-All overrides are optional positive integer environment variables; restart after
-changes. Missing overrides use defaults; invalid numeric overrides are rejected.
-Defaults are in src/lib/security-config.ts, src/lib/auth.ts and src/lib/quotas.ts,
-and listed in .env.example.
+Superadmins manage all applicable numeric limits in Settings > Quotas and limits.
+The form covers login protection, student/warden quotas, the superadmin write
+quota, time windows, photo size/dimensions, attachment/pending counts and expiry.
+MB and KB are decimal units. Values must be positive and within each field's
+range; zero does not disable protection. Photo size/dimension/attachment caps
+remain 500 KB, 1600 pixels and five photos. Static WebP validation stays required.
+Wardens cannot create reports and superadmins cannot submit reports/photos, so
+irrelevant role settings are not shown.
+
+Save applies all values atomically, records an admin audit entry and takes effect
+on subsequent requests without a restart. Concurrent stale edits receive 409;
+use Reload saved values to refresh before editing again. Use default values fills
+the form with built-in defaults; Save is still required to apply them.
+
+Usage counters are never reset by saving. Lowering limits below existing usage
+blocks new operations until usage expires or retained photos are removed. Current
+rate windows keep their original expiry; new window lengths apply to the next
+window. Password checks already running are allowed to finish if concurrency is
+lowered. The superadmin's own writes also count, so an overly low write limit may
+require waiting for its existing window before changing it again.
+
+Values persist in the application database, survive restart and are included in
+complete backups. The effective order is saved database value, optional environment
+override, built-in default. Environment changes require restart and do not override
+saved values. Defaults and allowed ranges are centralized in
+src/lib/limit-definitions.ts; .env.example documents fallback variables.
 
 | Login override | Default | Scope/window |
 | --- | ---: | --- |
@@ -83,13 +105,13 @@ shared concurrency cap.
 | MUTATIONS | 60 | 300 | 60 seconds |
 | UPLOADS | 20 | 60 | 60 seconds |
 | BYTES | 10000000 | 50000000 | 24 hours |
-| REPORTS | 10 | 10 | 24 hours |
+| REPORTS | 10 | Not permitted | 24 hours |
 | EVENTS | 50 | 300 | 24 hours |
 | RETAINED | 100000000 | 500000000 | All retained photos |
 
-Set QUOTA_STUDENT_<suffix> or QUOTA_WARDEN_<suffix>. Superadmin defaults match
-warden limits and accepts QUOTA_SUPERADMIN_<suffix>; role authorization still
-forbids report/photo use. Daily windows start at first usage, not calendar midnight.
+The table shows built-in defaults. Adjust the role fields in the settings page.
+Only QUOTA_SUPERADMIN_MUTATIONS applies to superadmin accounts; role authorization
+still forbids report/photo use. Daily windows start at first usage, not calendar midnight.
 The initial report event consumes REPORTS; later replies/status events consume
 EVENTS. Replays of report/event submission keys do not consume those daily quotas.
 
@@ -97,13 +119,17 @@ Upload/report/event counters commit in the mutation's IMMEDIATE transaction;
 failed validation and rollback do not consume them. The overall HTTP mutation
 limit reserves before asynchronous work, refunds errors, and keeps in-flight work
 bounded. A process crash can conservatively retain that reservation until its
-60-second window expires. Failed storage/DB writes delete staged objects when
+existing quota window expires. Failed storage/DB writes delete staged objects when
 possible; storage outages/crashes can leave unreferenced objects requiring operator
 reconciliation. These objects cannot be fetched through the protected photo API.
 
 Retained usage is SUM(uploads.bytes), including pending AND attached photos.
 Attaching never resets daily bytes or storage usage. Existing photos count on
-upgrade. The existing cleanup command removes abandoned uploads; deleting rows
+upgrade. Each new upload records its expiry using PHOTO_EXPIRY_HOURS. Changing the expiry
+setting does not alter previously accepted uploads; uploads predating migration
+005 retain their original 24-hour lifetime. This prevents policy changes from
+racing attachment and cleanup. The existing cleanup command removes expired
+unattached uploads; deleting rows
 releases retained usage but never refunds daily upload/byte counters. No new
 scheduler is needed. Keep existing cleanup/backup retention operations running.
 Rate errors return 429; retained storage exhaustion returns 413 with the stable
@@ -139,6 +165,8 @@ microphone, geolocation, payment and USB. APIs/photos remain private, no-store.
 
 Run npm test, npm run lint, npm run build, npm audit, npm run test:e2e, and
 `npx tsx tests/production-smoke.ts` after building. Use only synthetic test data.
-Migration 004 adds quota/lease tables. The existing strict backup schema policy
+Migration 004 adds quota/lease tables. Migration 005 adds persistent limit settings
+and fixed upload-expiry records; apply it using npm run db:migrate with writes
+stopped before starting this release. The existing strict backup schema policy
 means pre-migration archives require migration in an isolated old-version recovery
 instance before producing an archive for this version; do not bypass schema checks.

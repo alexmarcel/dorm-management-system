@@ -1,3 +1,4 @@
+import { configuredLimit, photoPolicy } from "@/lib/limit-settings";
 import { consume, uploadQuota } from "@/lib/quotas";
 import { securityConfig, sessionCookieOptions } from "@/lib/security-config";
 import { loginSource } from "@/lib/login-source";
@@ -132,7 +133,7 @@ async function handle(
           ).run(actor.id, reservation.reset_at);
         } catch {
           // A database outage must not replace a sanitized error with an uncaught
-          // database error. The conservative reservation expires within a minute.
+          // database error. The reservation expires with its existing quota window.
           console.error("PAINI quota refund unavailable.");
         }
       };
@@ -167,6 +168,7 @@ async function handle(
       403,
       "Maintenance access is not available to this account.",
     );
+    if (route === "upload-policy" && method === "GET") return json(photoPolicy(db));
     if (route === "locations" && method === "GET") return json(locations(db));
     if (parts[0] === "locations" && parts.length === 2 && method === "POST")
       return json(saveLocation(db, actor, parts[1], await input(req)));
@@ -209,14 +211,15 @@ async function handle(
           .get(actor.id) as { n: number }
       ).n;
       assert(
-        pending < 50,
+        pending < configuredLimit(db, "PHOTO_MAX_PENDING"),
         429,
         "Too many pending photos. Submit your current report or try again after cleanup.",
       );
-      const bytes = await body(req, 500000);
+      const policy = photoPolicy(db);
+      const bytes = await body(req, policy.maxBytes);
       let photo;
       try {
-        photo = await validatePhoto(bytes);
+        photo = await validatePhoto(bytes, policy);
       } catch (e) {
         if (e instanceof AppError) throw e;
         throw new AppError(400, "This image could not be decoded.");
@@ -227,6 +230,8 @@ async function handle(
       try {
         db.transaction(() => {
           activeActor(db, actor);
+          const currentPolicy = photoPolicy(db);
+          assert(photo.bytes.length <= currentPolicy.maxBytes && bytes.length <= currentPolicy.maxBytes && photo.width <= currentPolicy.maxDimension && photo.height <= currentPolicy.maxDimension, 400, "Photo exceeds the current upload limits.");
           uploadQuota(db, actor, photo.bytes.length);
           db.prepare("INSERT INTO uploads VALUES (?,?,?,?,?,?,?)").run(
             id,
@@ -237,6 +242,7 @@ async function handle(
             photo.height,
             now(),
           );
+          db.prepare("INSERT INTO upload_expirations(upload_id,expires_at) VALUES (?,?)").run(id, new Date(Date.now() + configuredLimit(db, "PHOTO_EXPIRY_HOURS") * 3600000).toISOString());
         }).immediate();
       } catch (e) {
         await deletePhoto(object_key);

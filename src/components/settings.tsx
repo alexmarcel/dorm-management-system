@@ -5,6 +5,7 @@ import { dateTime, type User } from "@/lib/constants";
 import { useLocale } from "./language";
 import { ErrorBox, PageTitle, Loading, Empty } from "./shared";
 import styles from "./settings.module.css";
+import LimitSettings from "./limit-settings";
 type Preview = {
   valid: boolean;
   count: number;
@@ -97,23 +98,26 @@ export default function Settings() {
         ))}
       </div>
       <div className="settings-tabs" role="tablist" aria-label={t("Settings")}>
-        {["Warden Accounts", "Backup and Restore", "Student CSV Import"].map(
-          (v) => (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === v}
-              className={tab === v ? "" : "secondary"}
-              key={v}
-              onClick={() => {
-                setTab(v);
-                setError("");
-              }}
-            >
-              {t(v)}
-            </button>
-          ),
-        )}
+        {[
+          "Warden Accounts",
+          "Backup and Restore",
+          "Student CSV Import",
+          "Quotas and limits",
+        ].map((v) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === v}
+            className={tab === v ? "" : "secondary"}
+            key={v}
+            onClick={() => {
+              setTab(v);
+              setError("");
+            }}
+          >
+            {t(v)}
+          </button>
+        ))}
       </div>
       <ErrorBox message={error || overview.error} />
       {overview.data && (
@@ -165,6 +169,9 @@ export default function Settings() {
           {t(message)}
         </div>
       )}
+      <div hidden={tab !== "Quotas and limits"}>
+        <LimitSettings />
+      </div>
       {tab === "Warden Accounts" && (
         <section className="panel">
           <div className="panel-heading">

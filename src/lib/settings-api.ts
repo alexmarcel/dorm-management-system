@@ -1,3 +1,4 @@
+import { limitSnapshot, saveLimits } from "./limit-settings";
 import { NextRequest, NextResponse } from "next/server";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -76,6 +77,8 @@ export async function settingsApi(
       requireInitialPasswordChange: !!initialPasswordChange(db),
     });
   }
+  if (route === "settings/limits" && method === "GET") return json(limitSnapshot(db));
+  if (route === "settings/limits" && method === "POST") return json(saveLimits(db, actor, await data(req, 32768)));
   if (route === "settings/wardens" && method === "GET")
     return json(listWardens(db, actor, req.nextUrl.searchParams));
   if (route === "settings/security" && method === "POST") {

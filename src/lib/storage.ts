@@ -1,3 +1,4 @@
+import { DEFAULT_PHOTO_POLICY, type PhotoPolicy } from "./limit-definitions";
 import {
   S3Client,
   PutObjectCommand,
@@ -21,29 +22,32 @@ function file(key: string) {
   assert(/^[a-f0-9-]+\.webp$/.test(key), 400, "Invalid photo key.");
   return path.join(/* turbopackIgnore: true */ root(), key);
 }
-export async function validatePhoto(bytes: Buffer) {
+export async function validatePhoto(
+  bytes: Buffer,
+  policy: PhotoPolicy = DEFAULT_PHOTO_POLICY,
+) {
   assert(
-    bytes.length <= 500000 && bytes.length > 0,
+    bytes.length <= policy.maxBytes && bytes.length > 0,
     400,
-    "Photos must be compressed to 500 KB or less.",
+    "Photo exceeds the configured size limit.",
   );
   const metadata = await sharp(bytes, { limitInputPixels: 2560000 }).metadata();
   assert(
     metadata.format === "webp" &&
       metadata.width &&
       metadata.height &&
-      metadata.width <= 1600 &&
-      metadata.height <= 1600 &&
+      metadata.width <= policy.maxDimension &&
+      metadata.height <= policy.maxDimension &&
       (metadata.pages || 1) === 1,
     400,
-    "Upload a static compressed WebP image no larger than 1600 pixels.",
+    "Upload a static WebP image within the configured dimensions.",
   );
   const cleaned = await sharp(bytes, { limitInputPixels: 2560000 })
     .rotate()
     .webp({ quality: 80 })
     .toBuffer();
   assert(
-    cleaned.length <= 500000,
+    cleaned.length <= policy.maxBytes,
     400,
     "Photo is too large after validation. Try a smaller image.",
   );

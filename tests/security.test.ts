@@ -226,7 +226,7 @@ test("quotas are transactional, independent, role-specific and count attached by
     QUOTA_STUDENT_EVENTS: "1",
   });
   try {
-    assert.ok(quotaLimit(f.w, "bytes") > quotaLimit(f.a, "bytes"));
+    assert.ok(quotaLimit(f.db, f.w, "bytes") > quotaLimit(f.db, f.a, "bytes"));
     assert.throws(() =>
       f.db
         .transaction(() => {

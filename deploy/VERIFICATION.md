@@ -1,6 +1,7 @@
-# Security revision verification - 15 October 2026
+# Security revision verification - 16 October 2026
 
-This revision removes proxy deployment requirements while retaining migration 004,
+This revision adds superadmin-managed quota and limit settings with migration 005,
+while retaining optional proxy configuration, migration 004,
 quotas, Argon2 cost/call-count protections, concurrency control, HTTPS origin
 validation, secure cookies, security headers, authorization and backup safeguards.
 
@@ -10,8 +11,8 @@ are shown without terminal decoration.
 
 ```text
 npm test
-  tests 32
-  pass 32
+  tests 37
+  pass 37
   fail 0
   cancelled 0
   skipped 0
@@ -21,8 +22,8 @@ npm run lint
 
 npm run build
 Next.js 16.4.0 (Turbopack)
-Compiled successfully in 1979ms
-Finished TypeScript in 998ms
+Compiled successfully in 1231ms
+Finished TypeScript in 1244ms
 Generating static pages using 5 workers (2/2)
 Routes /_not-found, /[[...path]], /api/[...path]: dynamic
 Proxy (Middleware)
@@ -31,7 +32,7 @@ npm audit
 found 0 vulnerabilities
 
 npm run test:e2e
-2 passed (25.3s)
+2 passed (58.4s)
 
 npx tsx tests/production-smoke.ts
 Production smoke passed: startup and login without proxy secrets or forwarding headers, enforced CSP rendering, authenticated dashboard, cookie flags, HSTS, permissions, private API caching, authentication and exact-origin rejection.
@@ -44,7 +45,15 @@ mutation quota exhaustion and validation-error refunds. It runs a real productio
 Next server and Chromium with isolated synthetic data. TLS termination is simulated
 via exact Origin headers; the live Docker/Traefik deployment was not accessed.
 
-New coverage verifies validated best-effort forwarding-header precedence, malformed
+New settings coverage verifies superadmin-only access, strict validation, atomic
+saves and audit records, stale-edit conflicts, cross-process updates, persistence
+and backup/restore. Runtime checks cover database overrides, unchanged active
+quota windows, configurable login/concurrency limits, photo limits and fixed
+upload expiration. Browser coverage includes saving, reloading, restoring default
+values, role restrictions and translated settings. Desktop and mobile screenshots
+were reviewed.
+
+Existing security coverage verifies validated best-effort forwarding-header precedence, malformed
 address fallback, IPv6 normalization, the global ceiling despite source/username
 rotation, fallback limits without a username-only lockout, key persistence across
 restart, concurrent initialization from four processes and fail-closed corrupt key
@@ -64,7 +73,8 @@ concurrency limits are independent of them. Global/fallback ceilings can tempora
 affect legitimate users under sustained abuse; defaults and tuning are documented
 in SECURITY.md. Production CSP remains enforced; development CSP is report-only.
 Same-host workers must share the existing application and control SQLite stores.
-No new migration, operator-managed secret or Traefik/network change is needed.
+Apply migration 005 with npm run db:migrate before starting the updated app.
+No operator-managed secret or Traefik/network change is needed.
 
 The browser suite used the Windows process-management permission required for
 server teardown. The audit used registry access. Generated Next type-reference
